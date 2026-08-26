@@ -9,6 +9,11 @@ controller:registerEvents(g_game, {
 
         g_game.enableFeature(GameFormatCreatureName)
 
+        -- Xibat's 1098-derived SPR stores RGBA pixels.
+        if version == 1098 then
+            g_game.enableFeature(GameSpritesAlphaChannel)
+        end
+
         -- For Walk
         g_game.enableFeature(GameAllowPreWalk)
         g_game.enableFeature(GameMapCache)
