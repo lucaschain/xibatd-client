@@ -1,5 +1,5 @@
-local DONATION_URL = nil
-local GAME_SHOP_CODE = 201
+local GAME_SHOP_CODE = modules.game_xibat_core.XibatOpcode.Shop
+local REQUEST_TIMEOUT = 5000
 
 local categories = {}
 local offers = {}
@@ -8,12 +8,19 @@ local history = {}
 local gameShopWindow = nil
 local selected = nil
 local selectedOffer = nil
-local changeNameWindow = nil
 local msgWindow = nil
-local transferWindow = nil
 
 local premiumPoints = 0
 local premiumSecondPoints = -1
+local catalogRevision = nil
+local nextRequestId = 0
+local pendingRequest = nil
+local pendingEvent = nil
+local refreshRequired = false
+local refreshEvent = nil
+local offerDescription = nil
+local descriptionPending = false
+local refreshShop
 
 local CATEGORY_NONE = -1
 local CATEGORY_PREMIUM = 0
@@ -24,52 +31,37 @@ local CATEGORY_MOUNT = 4
 local CATEGORY_EXTRAS = 5
 
 local searchResultCategoryId = "Search Results"
+gameShopController = Controller:new()
 
 function init()
-    connect(
-        g_game,
-        {
-            onGameStart = create,
-            onGameEnd = destroy
-        }
-    )
-
-    ProtocolGame.registerExtendedOpcode(GAME_SHOP_CODE, onExtendedOpcode)
-    if g_game.isOnline() then
-        create()
-    end
+    gameShopController:init()
 end
 
 function terminate()
-    disconnect(
-        g_game,
-        {
-            onGameStart = create,
-            onGameEnd = destroy
-        }
-    )
+    gameShopController:terminate()
+end
 
-    ProtocolGame.unregisterExtendedOpcode(GAME_SHOP_CODE, onExtendedOpcode)
+function gameShopController:onInit()
+    self:registerExtendedJSONOpcode(GAME_SHOP_CODE, onExtendedOpcode)
+end
+
+function gameShopController:onGameStart()
+    create()
+end
+
+function gameShopController:onGameEnd()
     destroy()
 end
 
-function onExtendedOpcode(protocol, code, buffer)
-    local json_status, json_data =
-        pcall(
-        function()
-            return json.decode(buffer)
-        end
-    )
-    if not json_status then
-        g_logger.error("SHOP json error: " .. json_data)
-        return false
-    end
+local function sendRequest(payload)
+    gameShopController:sendExtendedJSONOpcode(GAME_SHOP_CODE, payload)
+end
 
-    local action = json_data["action"]
-    local data = json_data["data"]
-    if not action or not data then
-        return false
-    end
+function onExtendedOpcode(_, _, payload)
+    if not gameShopWindow then return false end
+    local response = XibatShopContract.validate(payload)
+    if not response then return false end
+    local action, data = response.action, response.body
 
     if action == "fetchBase" then
         onGameShopFetchBase(data)
@@ -84,6 +76,7 @@ function onExtendedOpcode(protocol, code, buffer)
     elseif action == "msg" then
         onGameShopMsg(data)
     end
+    return true
 end
 
 function create()
@@ -95,9 +88,8 @@ function create()
 
     local protocolGame = g_game.getProtocolGame()
     if protocolGame then
-        protocolGame:sendExtendedOpcode(GAME_SHOP_CODE, json.encode({action = "fetch", data = {}}))
+        protocolGame:sendExtendedJSONOpcode(GAME_SHOP_CODE, XibatShopContract.fetchRequest())
     end
-    createTransferWindow()
 end
 
 function destroy()
@@ -111,36 +103,43 @@ function destroy()
         msgWindow = nil
     end
 
-    if changeNameWindow then
-        changeNameWindow:destroy()
-        changeNameWindow = nil
-    end
-
-    if transferWindow then
-        transferWindow:destroy()
-        transferWindow = nil
-    end
-
     selected = nil
     selectedOffer = nil
+    categories = {}
+    offers = {}
+    history = {}
+    premiumPoints = 0
+    premiumSecondPoints = -1
+    catalogRevision = nil
+    pendingRequest = nil
+    refreshRequired = false
+    if refreshEvent then gameShopController:removeEvent(refreshEvent) refreshEvent = nil end
+    offerDescription = nil
+    descriptionPending = false
+    if pendingEvent then gameShopController:removeEvent(pendingEvent) pendingEvent = nil end
 end
 
 function onGameShopFetchBase(data)
+    categories = {}
+    offers = {}
+    catalogRevision = data.catalogRevision
+    selected = nil
+    selectedOffer = nil
+    offerDescription = nil
+    descriptionPending = false
+    gameShopWindow:getChildById("categoriesList"):destroyChildren()
     for i = 1, #data.categories do
-        addCategory(data.categories[i])
-    end
-
-    DONATION_URL = data.url
-end
-
-function hideTransferWindow()
-    if transferWindow then
-        transferWindow:hide()
+        addCategory({
+            title = data.categories[i].name,
+            parent = nil,
+            iconId = 8,
+            categoryId = CATEGORY_OUTFIT,
+            serverCategoryId = data.categories[i].categoryId,
+        })
     end
 end
 
 function show()
-    hideTransferWindow()
     if not gameShopWindow then
         return
     end
@@ -149,16 +148,17 @@ function show()
     gameShopWindow:show()
     gameShopWindow:raise()
     gameShopWindow:focus()
+    if refreshRequired then refreshShop() end
 end
 
 function hide()
-    hideTransferWindow()
     if gameShopWindow then
         gameShopWindow:hide()
     end
 end
 
 function showHistory()
+    sendRequest(XibatShopContract.historyRequest())
     deselect()
     gameShopWindow:getChildById("offers"):hide()
     gameShopWindow:getChildById("history"):show()
@@ -191,9 +191,18 @@ function updateHistory()
     historyPanel:getChildById("pageLabel"):setText("Page " .. currentPage .. "/" .. totalPages)
 end
 
-function onGameShopUpdateHistory(historyList)
+function onGameShopUpdateHistory(data)
     currentPage = 1
-    history = historyList
+    history = {}
+    for _, entry in ipairs(data.entries) do
+        table.insert(history, {
+            date = entry.date,
+            price = -entry.cost,
+            isSecondPrice = false,
+            name = entry.title,
+            count = 1,
+        })
+    end
     totalPages = math.max(1, math.ceil(#history / entriesPerPage))
 
     local historyPanel = gameShopWindow:getChildById("history")
@@ -252,14 +261,34 @@ function comma_value(n)
     return left .. (num:reverse():gsub("(%d%d%d)", "%1,"):reverse()) .. right
 end
 
-function buyPoints()
-    g_platform.openUrl(DONATION_URL)
-end
-
 function onGameShopFetchOffers(data)
-    offers[data.category] = data.offers
-    if not selected and data.category == "Premium Time" then
-        select(gameShopWindow:getChildById("categoriesList"):getChildren()[1]:getChildById("button"))
+    if data.catalogRevision ~= catalogRevision then return end
+    local categoryName = categories['Outfits'] and 'Outfits' or next(categories)
+    if not categoryName then return end
+    offers[categoryName] = {}
+    local sex = g_game.getLocalPlayer():getSex()
+    for _, offer in ipairs(data.offers) do
+        table.insert(offers[categoryName], {
+            offerId = offer.offerId,
+            parent = categoryName,
+            name = offer.title,
+            id = sex == 0 and offer.looktypes[2] or offer.looktypes[1],
+            price = offer.cost,
+            isSecondPrice = false,
+            count = 1,
+            addons = offer.addons,
+            owned = offer.owned,
+            categoryId = CATEGORY_OUTFIT,
+        })
+    end
+    if refreshRequired then
+        refreshRequired = false
+        pendingRequest = nil
+        if refreshEvent then gameShopController:removeEvent(refreshEvent) refreshEvent = nil end
+    end
+    if not selected then
+        local first = gameShopWindow:getChildById("categoriesList"):getChildren()[1]
+        if first then select(first:getChildById("button")) end
     end
 end
 
@@ -281,36 +310,16 @@ function addCategory(data)
 end
 
 function onGameShopUpdatePoints(data)
-    premiumPoints = tonumber(data.points)
-    premiumSecondPoints = tonumber(data.secondPoints)
+    premiumPoints = data.points
+    premiumSecondPoints = -1
     local pointsWidget = gameShopWindow:getChildById("balance"):getChildById("value")
     pointsWidget:setText(comma_value(premiumPoints))
 
     local balanceSecondWidget = gameShopWindow:getChildById("balanceSecond")
-    if premiumSecondPoints ~= -1 then
-        balanceSecondWidget:getChildById("value"):setText(comma_value(premiumSecondPoints))
-        balanceSecondWidget:show()
-        balanceSecondWidget:setWidth(105)
-        balanceSecondWidget:setMarginLeft(6)
-        transferWindow.taskPointsLabelCoin:show()
-        transferWindow.taskPointsAmountScrollbar:show()
-        transferWindow.taskPointsCoin:show()
-        transferWindow.taskPointsBalance:show()
-        transferWindow.taskPointsBalance:setText(tr("Transferable Task points: ") .. comma_value(premiumSecondPoints))
-        transferWindow.taskPointsAmountScrollbar:setMaximum(premiumSecondPoints)
-    else
-        balanceSecondWidget:hide()
-        balanceSecondWidget:setWidth(1)
-        balanceSecondWidget:setMarginLeft(0)
-        transferWindow.taskPointsBalance:hide()
-        transferWindow.taskPointsAmountLabel:hide()
-        transferWindow.taskPointsLabelCoin:hide()
-        transferWindow.taskPointsAmountScrollbar:hide()
-        transferWindow.taskPointsCoin:hide()
-    end
-
-    transferWindow.coinsBalance:setText(tr("Transferable Tibia Coins: ") .. comma_value(premiumPoints))
-    transferWindow.coinsAmountScrollbar:setMaximum(premiumPoints)
+    balanceSecondWidget:hide()
+    balanceSecondWidget:setWidth(1)
+    balanceSecondWidget:setMarginLeft(0)
+    if selectedOffer then updateDescription(selectedOffer) end
 end
 
 function select(self, ignoreSearch)
@@ -429,6 +438,7 @@ function showOffers(id)
                     widget:getChildById("count"):show()
                 elseif categoryId == CATEGORY_OUTFIT then
                     currentOutfit.type = offersCache[i].id
+                    currentOutfit.addons = offersCache[i].addons
                     outfit:show()
                     outfit:setOutfit(currentOutfit)
                 elseif categoryId == CATEGORY_MOUNT then
@@ -459,21 +469,11 @@ function updateDescription(self)
         widget = g_ui.createWidget("OfferDescriptionLabel", descriptionPanel)
     end
 
-    local categoryToUse = self.data.originalCategory or self.categoryId
-    if self.categoryId == searchResultCategoryId and not self.data.originalCategory then
-        categoryToUse = self.data.parent
+    widget:setText(offerDescription or tr('Loading description...'))
+    if not offerDescription and not descriptionPending then
+        descriptionPending = true
+        sendRequest(XibatShopContract.descriptionRequest(self.data.offerId))
     end
-
-    g_game.getProtocolGame():sendExtendedOpcode(
-        GAME_SHOP_CODE,
-        json.encode({
-            action = "getDescription",
-            data = {
-                category = categoryToUse,
-                name = self.data.name
-            }
-        })
-    )
 
     local buyButton = offerDetails:getChildById("buyButton")
     local priceWidget = offerDetails:getChildById("price")
@@ -484,8 +484,9 @@ function updateDescription(self)
     priceWidget:setText(comma_value(self.data.price))
 
     local globalPoints = self.data.isSecondPrice and premiumSecondPoints or premiumPoints
-    priceWidget:setEnabled(self.data.price <= globalPoints)
-    buyButton:setEnabled(self.data.price <= globalPoints)
+    priceWidget:setEnabled(not self.data.owned and self.data.price <= globalPoints)
+    buyButton:setEnabled(not self.data.owned and self.data.price <= globalPoints and
+        not pendingRequest and not refreshRequired)
 
     if self.additionalPriceValue and self.additionalCountValue then
         buyButton:setText("Buy " .. self.data.count)
@@ -510,7 +511,8 @@ function updateDescription(self)
         buyButton.price = nil
         buyButton.count = nil
 
-        buyButton:setText("Buy")
+        buyButton:setText(self.data.owned and "Owned" or
+            (pendingRequest or refreshRequired) and "Pending" or "Buy")
         additionalPriceWidget:hide()
     end
 
@@ -534,6 +536,7 @@ function updateDescription(self)
             item:setItemId(self.data.id)
         elseif categoryId == CATEGORY_OUTFIT then
             currentOutfit.type = self.data.id
+            currentOutfit.addons = self.data.addons
             outfit:show()
             outfit:setOutfit(currentOutfit)
         elseif categoryId == CATEGORY_MOUNT then
@@ -548,15 +551,12 @@ function onGameShopFetchDescription(data)
         return
     end
     
-    if selectedOffer.data.name ~= data.name then
+    if selectedOffer.data.offerId ~= data.offerId then
         return
     end
-    
-    if selectedOffer.categoryId == searchResultCategoryId and 
-       data.category and selectedOffer.data.originalCategory and 
-       data.category ~= selectedOffer.data.originalCategory then
-        return
-    end
+
+    offerDescription = data.description
+    descriptionPending = false
 
     local offersPanel = gameShopWindow:getChildById("offers")
     local offerDetails = offersPanel:getChildById("offerDetails")
@@ -568,8 +568,20 @@ function onGameShopFetchDescription(data)
     widget:setText(data.description)
 end
 
+refreshShop = function()
+    refreshRequired = true
+    sendRequest(XibatShopContract.fetchRequest())
+    if refreshEvent then gameShopController:removeEvent(refreshEvent) end
+    refreshEvent = gameShopController:scheduleEvent(function()
+        refreshEvent = nil
+        if refreshRequired then
+            displayErrorBox(tr('Store'), tr('The store state could not be refreshed. Reopen the store to retry.'))
+        end
+    end, REQUEST_TIMEOUT)
+end
+
 function onOfferBuy(self)
-    if not selectedOffer then
+    if not selectedOffer or selectedOffer.data.owned or pendingRequest or refreshRequired then
         displayInfoBox("Error", "Something went wrong, make sure to select category and offer.")
         return
     end
@@ -577,77 +589,37 @@ function onOfferBuy(self)
     hide()
 
     local title = "Purchase Confirmation"
-    local msg
-    if self.count and self.count > 1 then
-        msg =
-            "Do you want to buy " ..
-            self.count .. "x " .. selectedOffer.data.name .. " for " .. comma_value(self.price) .. " points?"
-    else
-        msg =
-            "Do you want to buy " ..
-            selectedOffer.data.name .. " for " .. comma_value(selectedOffer.data.price) .. " points?"
-    end
-
-    if selectedOffer.data.name == "Name Change" then
-        msgWindow =
-            displayGeneralBox(
-            title,
-            msg,
-            {
-                {text = "Yes", callback = changeName},
-                {text = "No", callback = buyCanceled},
-                anchor = AnchorHorizontalCenter
-            },
-            changeName,
-            buyCanceled
-        )
-    else
-        msgWindow =
-            displayGeneralBox(
-            title,
-            msg,
-            {
-                {text = "Yes", callback = buyConfirmed},
-                {text = "No", callback = buyCanceled},
-                anchor = AnchorHorizontalCenter
-            },
-            buyConfirmed,
-            buyCanceled
-        )
-    end
-
-    if self.count and self.count > 1 then
-        msgWindow.count = self.count
-        msgWindow.price = self.price
-    else
-        msgWindow.count = selectedOffer.data.count
-        msgWindow.price = selectedOffer.data.price
-    end
+    local msg = "Do you want to buy " .. selectedOffer.data.name .. " for " ..
+        comma_value(selectedOffer.data.price) .. " points?"
+    msgWindow = displayGeneralBox(title, msg, {
+        {text = "Yes", callback = buyConfirmed},
+        {text = "No", callback = buyCanceled},
+        anchor = AnchorHorizontalCenter
+    }, buyConfirmed, buyCanceled)
 end
 
 function buyConfirmed()
-    local protocolGame = g_game.getProtocolGame()
-    if protocolGame then
-        protocolGame:sendExtendedOpcode(
-            GAME_SHOP_CODE,
-            json.encode(
-                {
-                    action = "purchase",
-                    data = {
-                        count = msgWindow.count,
-                        price = msgWindow.price,
-                        name = selectedOffer.data.name,
-                        id = selectedOffer.data.id,
-                        parent = selectedOffer.data.parent,
-                        originalCategory = selectedOffer.data.originalCategory
-                    }
-                }
-            )
-        )
+    if not selectedOffer or selectedOffer.data.owned or pendingRequest or refreshRequired or not catalogRevision then
+        if msgWindow then msgWindow:destroy() msgWindow = nil end
+        return
     end
 
+    local offer = selectedOffer.data
+    nextRequestId = nextRequestId % 2147483647 + 1
+    pendingRequest = {requestId = nextRequestId, offerId = offer.offerId}
+    sendRequest(XibatShopContract.purchaseRequest(nextRequestId, catalogRevision, offer.offerId))
+    if pendingEvent then gameShopController:removeEvent(pendingEvent) end
+    pendingEvent = gameShopController:scheduleEvent(function()
+        pendingEvent = nil
+        if not pendingRequest then return end
+        show()
+        if selectedOffer then updateDescription(selectedOffer) end
+        refreshShop()
+        displayErrorBox(tr('Store'), tr('The purchase response timed out. Reopen the store to refresh its state.'))
+    end, REQUEST_TIMEOUT)
     msgWindow:destroy()
     msgWindow = nil
+    if selectedOffer then updateDescription(selectedOffer) end
 end
 
 function buyCanceled()
@@ -656,140 +628,38 @@ function buyCanceled()
     show()
 end
 
-function changeName()
-    msgWindow:destroy()
-    msgWindow = nil
-    if changeNameWindow then
-        return
-    end
-
-    changeNameWindow = g_ui.displayUI("changename")
-end
-
-function confirmChangeName()
-    local protocolGame = g_game.getProtocolGame()
-    if protocolGame then
-        protocolGame:sendExtendedOpcode(
-            GAME_SHOP_CODE,
-            json.encode(
-                {
-                    action = "purchase",
-                    data = {
-                        count = selectedOffer.data.count,
-                        price = selectedOffer.data.price,
-                        name = selectedOffer.data.name,
-                        id = selectedOffer.data.id,
-                        parent = selectedOffer.data.parent,
-                        nick = changeNameWindow:getChildById("targetName"):getText()
-                    }
-                }
-            )
-        )
-
-        changeNameWindow:destroy()
-        changeNameWindow = nil
-    end
-end
-
-function cancelChangeName()
-    changeNameWindow:destroy()
-    changeNameWindow = nil
-end
-
 function onGameShopMsg(data)
-    local type = data.type
-    local text = data.msg
-
-    local title = nil
-    local close = false
-    if type == "info" then
-        title = "Store Information"
-        close = data.close
-    elseif type == "error" then
-        title = "Store Error"
-        close = true
-    end
-
-    if close then
-        hideHistory()
-        hide()
-    end
-
-    displayInfoBoxWithCallback(
-        title,
-        text,
-        {{text = "Ok", callback = defaultCallback}},
-        function()
-            show()
+    if data.requestId then
+        if not pendingRequest or data.requestId ~= pendingRequest.requestId or data.offerId ~= pendingRequest.offerId then
+            return
         end
-    )
-end
-
-function displayInfoBoxWithCallback(title, message, callback)
-    local messageBox
-    local defaultCallback = function()
-        if callback then
-            show()
-        end
-        messageBox:ok()
-    end
-
-    messageBox =
-        UIMessageBox.display(
-        title,
-        message,
-        {{text = "Ok", callback = defaultCallback}},
-        defaultCallback,
-        defaultCallback
-    )
-    return messageBox
-end
-
-function changeCoinsAmount(value)
-    transferWindow:getChildById("coinsAmountLabel"):setText("Amount to gift: " .. comma_value(value))
-end
-
-function changeTaskPointsAmount(value)
-    transferWindow:getChildById("taskPointsAmountLabel"):setText("Amount to gift: " .. comma_value(value))
-end
-
-function confirmGiftCoins()
-    if not transferWindow then
+        pendingRequest = nil
+        if pendingEvent then gameShopController:removeEvent(pendingEvent) pendingEvent = nil end
+    elseif pendingRequest and not refreshRequired then
         return
     end
 
-    local protocolGame = g_game.getProtocolGame()
-    if protocolGame then
-        protocolGame:sendExtendedOpcode(
-            GAME_SHOP_CODE,
-            json.encode(
-                {
-                    action = "transfer",
-                    data = {
-                        amount = tonumber(transferWindow.coinsAmountScrollbar:getValue()),
-                        amountSecond = tonumber(transferWindow.taskPointsAmountScrollbar:getValue()),
-                        target = transferWindow.recipient:getText()
-                    }
-                }
-            )
-        )
-        transferWindow.recipient:setText("")
-        transferWindow.coinsAmountScrollbar:setValue(0)
-        transferWindow.taskPointsAmountScrollbar:setValue(0)
-    end
-end
-
-function cancelGiftCoins()
-    if transferWindow then
-        transferWindow:hide()
-        show()
-    end
-end
-
-function createTransferWindow()
-    if not transferWindow then
-        transferWindow = g_ui.displayUI("giftcoins")
-        transferWindow:hide()
+    local messages = {
+        ok = tr('The Philosopher Outfit was added to your character.'),
+        already_owned = tr('This character already owns the Philosopher Outfit.'),
+        insufficient_points = tr('You do not have enough premium points.'),
+        pending = tr('The purchase is being finalized. Reopen the store to refresh its state.'),
+        unavailable = tr('The store is temporarily unavailable.'),
+    }
+    local message = messages[data.code] or tr('The store could not complete this request.')
+    if data.ok or data.code == 'already_owned' then
+        for _, categoryOffers in pairs(offers) do
+            for _, offer in ipairs(categoryOffers) do
+                if offer.offerId == data.offerId then offer.owned = true end
+            end
+        end
+        if selectedOffer then updateDescription(selectedOffer) end
+        refreshShop()
+        displayInfoBox(tr('Store'), message)
+    else
+        if selectedOffer then updateDescription(selectedOffer) end
+        if data.requestId then refreshShop() end
+        displayErrorBox(tr('Store'), message)
     end
 end
 
@@ -803,16 +673,6 @@ function toggle()
     end
 
     show()
-end
-
-function toggleGiftCoins()
-    if transferWindow then
-        hide()
-        transferWindow:show()
-        transferWindow:raise()
-        transferWindow:focus()
-        transferWindow:setOn(premiumSecondPoints ~= -1)
-    end
 end
 
 function onTypeSearch(self)

@@ -416,39 +416,6 @@ MainWindow
     anchors.top: prev.top
     anchors.left: prev.right
 
-  Button
-    anchors.top: prev.top
-    anchors.left: prev.right
-    text: Get
-    text-align: left
-    text-offset: 16 0
-    color: #C0C0C0
-    image-color: #89ff89
-    icon: images/coin
-    icon-size: 12 12
-    icon-offset: 40 5
-    size: 64 20
-    margin-left: 6
-    focusable: false
-    @onClick: modules.game_shop.buyPoints()
-    $pressed:
-      text-offset: 17 1
-      icon-offset: 41 5
-    $on:
-      icon: images/coin_second
-
-  Button
-    anchors.top: prev.top
-    anchors.left: prev.right
-    size: 87 20
-    margin-left: 6
-    icon: images/giftcoin
-    icon-offset: 0 0
-    focusable: false
-    @onClick: modules.game_shop.toggleGiftCoins()
-    $pressed:
-      icon-offset: 1 0
-
   FlatPanel
     id: history
     anchors.top: parent.top

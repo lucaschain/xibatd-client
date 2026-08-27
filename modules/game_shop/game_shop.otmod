@@ -4,6 +4,7 @@ Module
   author: MatC, Nottinghster
   website: None
   sandboxed: true
-  scripts: [ game_shop ]
+  dependencies: [ game_interface, game_xibat_core ]
+  scripts: [ xibat_shop_contract, game_shop ]
   @onLoad: init()
   @onUnload: terminate()
