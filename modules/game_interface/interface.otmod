@@ -63,6 +63,7 @@ Module
     - game_xibat_raid
     - game_xibat_turret
     - game_xibat_forge
+    - game_xibat_ascension
 
   @onLoad: init()
   @onUnload: terminate()

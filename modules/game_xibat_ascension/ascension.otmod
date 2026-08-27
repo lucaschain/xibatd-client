@@ -1,0 +1,8 @@
+Module
+  name: game_xibat_ascension
+  description: Xiba Ascension milestone board
+  author: Xiba
+  sandboxed: true
+  scripts: [ ascension ]
+  @onLoad: xibatAscensionController:init()
+  @onUnload: xibatAscensionController:terminate()

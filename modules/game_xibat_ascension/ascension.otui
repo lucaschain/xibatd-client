@@ -1,0 +1,168 @@
+AscensionCategoryButton < Button
+  height: 30
+  margin-bottom: 3
+  text-align: left
+  text-offset: 12 0
+  font: verdana-11px-rounded
+
+AscensionNodeCard < Panel
+  size: 112 184
+  background-color: #182126
+  border-width: 1
+  border-color: #40515a
+  padding: 6
+
+  UIItem
+    id: item
+    size: 48 48
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    virtual: true
+    phantom: true
+
+  UIImage
+    id: icon
+    size: 48 48
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    image-smooth: true
+
+  Label
+    id: name
+    anchors.top: item.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 5
+    height: 34
+    text-align: topCenter
+    text-wrap: true
+    color: #e9dec1
+    font: verdana-11px-rounded
+
+  Label
+    id: requirement
+    anchors.top: name.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 2
+    text-align: center
+    color: #91a7b2
+
+  Label
+    id: status
+    anchors.top: requirement.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 3
+    text-align: center
+    font: verdana-11px-rounded
+
+  Button
+    id: spend
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    height: 25
+
+MainWindow
+  id: ascensionWindow
+  size: 850 570
+  text: Ascension
+  image-source: /images/ui/window
+  @onEscape: xibatAscensionController:close()
+
+  Label
+    id: level
+    anchors.top: parent.top
+    anchors.left: parent.left
+    margin-top: 8
+    margin-left: 16
+    font: verdana-11px-rounded
+    color: #e4b95e
+
+  Label
+    id: points
+    anchors.top: level.bottom
+    anchors.left: level.left
+    margin-top: 3
+    color: #c8d5d9
+
+  ProgressBar
+    id: experience
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 12
+    margin-left: 220
+    margin-right: 22
+    height: 18
+    text: Ascension Progress
+
+  Panel
+    id: categoryRail
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    margin-top: 64
+    margin-bottom: 48
+    margin-left: 14
+    width: 190
+    layout:
+      type: verticalBox
+      fit-children: false
+
+  VerticalSeparator
+    anchors.top: categoryRail.top
+    anchors.bottom: categoryRail.bottom
+    anchors.left: categoryRail.right
+    margin-left: 8
+
+  Label
+    id: categoryTitle
+    anchors.top: categoryRail.top
+    anchors.left: categoryRail.right
+    anchors.right: parent.right
+    margin-left: 22
+    margin-right: 18
+    font: verdana-11px-rounded
+    color: #e4b95e
+
+  Label
+    id: categoryProgress
+    anchors.top: categoryTitle.bottom
+    anchors.left: categoryTitle.left
+    anchors.right: categoryTitle.right
+    margin-top: 4
+    color: #91a7b2
+
+  Panel
+    id: nodes
+    anchors.top: categoryProgress.bottom
+    anchors.left: categoryTitle.left
+    anchors.right: categoryTitle.right
+    anchors.bottom: parent.bottom
+    margin-top: 12
+    margin-bottom: 52
+    layout:
+      type: grid
+      cell-size: 112 184
+      cell-spacing: 8
+      num-columns: 5
+
+  Label
+    id: message
+    anchors.left: categoryTitle.left
+    anchors.right: categoryTitle.right
+    anchors.bottom: parent.bottom
+    margin-bottom: 20
+    text-align: center
+    color: #d5c9a9
+
+  Button
+    id: reset
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin-right: 14
+    margin-bottom: 14
+    width: 120
+    text: Reset Points
