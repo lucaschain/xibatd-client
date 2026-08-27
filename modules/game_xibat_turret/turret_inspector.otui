@@ -1,0 +1,167 @@
+XibatTurretStatName < Label
+  color: #8f9da5
+  text-auto-resize: true
+
+XibatTurretStatValue < Label
+  color: #e2e8eb
+  text-auto-resize: true
+
+XibatTurretNextValue < Label
+  color: #79c99e
+  text-auto-resize: true
+
+MainWindow
+  id: xibatTurretInspector
+  !text: tr('Turret Command')
+  size: 440 310
+  @onEscape: turretInspectorController:close()
+
+  Label
+    id: name
+    anchors.left: parent.left
+    anchors.top: parent.top
+    font: verdana-11px-rounded
+    color: #eef3f5
+    text-auto-resize: true
+
+  Label
+    id: levelBadge
+    anchors.right: parent.right
+    anchors.top: parent.top
+    color: #f4d08a
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  HorizontalSeparator
+    id: headerSeparator
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: name.bottom
+    margin-top: 10
+
+  Label
+    id: currentTitle
+    anchors.left: parent.left
+    anchors.top: headerSeparator.bottom
+    margin-left: 112
+    margin-top: 12
+    !text: tr('CURRENT')
+    color: #71828c
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  Label
+    id: nextTitle
+    anchors.left: parent.left
+    anchors.top: currentTitle.top
+    margin-left: 245
+    !text: tr('NEXT LEVEL')
+    color: #71828c
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  XibatTurretStatName
+    id: levelLabel
+    anchors.left: parent.left
+    anchors.top: currentTitle.bottom
+    margin-top: 16
+    !text: tr('Level')
+
+  XibatTurretStatName
+    id: damageLabel
+    anchors.left: parent.left
+    anchors.top: levelLabel.bottom
+    margin-top: 15
+    !text: tr('Damage')
+
+  XibatTurretStatName
+    id: speedLabel
+    anchors.left: parent.left
+    anchors.top: damageLabel.bottom
+    margin-top: 15
+    !text: tr('Attack rate')
+
+  XibatTurretStatName
+    id: rangeLabel
+    anchors.left: parent.left
+    anchors.top: speedLabel.bottom
+    margin-top: 15
+    !text: tr('Range')
+
+  XibatTurretStatValue
+    id: levelCurrent
+    anchors.left: currentTitle.left
+    anchors.top: levelLabel.top
+
+  XibatTurretStatValue
+    id: damageCurrent
+    anchors.left: currentTitle.left
+    anchors.top: damageLabel.top
+
+  XibatTurretStatValue
+    id: speedCurrent
+    anchors.left: currentTitle.left
+    anchors.top: speedLabel.top
+
+  XibatTurretStatValue
+    id: rangeCurrent
+    anchors.left: currentTitle.left
+    anchors.top: rangeLabel.top
+
+  XibatTurretNextValue
+    id: levelNext
+    anchors.left: nextTitle.left
+    anchors.top: levelLabel.top
+
+  XibatTurretNextValue
+    id: damageNext
+    anchors.left: nextTitle.left
+    anchors.top: damageLabel.top
+
+  XibatTurretNextValue
+    id: speedNext
+    anchors.left: nextTitle.left
+    anchors.top: speedLabel.top
+
+  XibatTurretNextValue
+    id: rangeNext
+    anchors.left: nextTitle.left
+    anchors.top: rangeLabel.top
+
+  HorizontalSeparator
+    id: actionSeparator
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: rangeLabel.bottom
+    margin-top: 15
+
+  Label
+    id: soulBalance
+    anchors.left: parent.left
+    anchors.top: actionSeparator.bottom
+    margin-top: 10
+    color: #b8c3c9
+    text-auto-resize: true
+
+  Button
+    id: closeButton
+    size: 82 26
+    anchors.left: parent.left
+    anchors.bottom: parent.bottom
+    !text: tr('Close')
+    @onClick: turretInspectorController:close()
+
+  Button
+    id: upgradeButton
+    size: 142 26
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    !text: tr('Upgrade')
+
+  Button
+    id: sellButton
+    size: 108 26
+    anchors.right: upgradeButton.left
+    anchors.bottom: parent.bottom
+    margin-right: 6
+    !text: tr('Sell')

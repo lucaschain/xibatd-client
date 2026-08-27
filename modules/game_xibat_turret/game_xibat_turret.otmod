@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_turret
+  description: Xibat runtime turret inspector
+  author: Xibat
+  sandboxed: true
+  dependencies: [ game_interface, game_xibat_core ]
+  scripts: [ turret_inspector ]
+  @onLoad: turretInspectorController:init()
+  @onUnload: turretInspectorController:terminate()

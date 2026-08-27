@@ -34,4 +34,6 @@ jobs:
           exit "${failed}"
 
       - name: Run Xibat protocol lifecycle tests
-        run: luajit tests/xibat_protocol_lifecycle_test.lua "$PWD"
+        run: |
+          luajit tests/xibat_protocol_lifecycle_test.lua "$PWD"
+          luajit tests/xibat_turret_inspector_test.lua "$PWD"
