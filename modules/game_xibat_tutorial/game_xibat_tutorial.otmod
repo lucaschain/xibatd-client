@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_tutorial
+  description: Xiba tutorial lesson browser
+  author: Xiba
+  sandboxed: true
+  dependencies: [ game_interface, game_xibat_core, client_topmenu ]
+  scripts: [ tutorial ]
+  @onLoad: xibatTutorialController:init()
+  @onUnload: xibatTutorialController:terminate()

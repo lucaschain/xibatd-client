@@ -1,0 +1,102 @@
+XibatTutorialTopicButton < Button
+  height: 32
+  margin-right: 6
+  text-align: center
+  font: verdana-11px-rounded
+
+MainWindow
+  id: tutorialWindow
+  size: 720 600
+  text: Field Manual
+  image-source: /images/ui/window
+  @onEscape: xibatTutorialController:close()
+
+  Panel
+    id: topicRail
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 4
+    margin-left: 14
+    margin-right: 14
+    height: 32
+    layout:
+      type: horizontalBox
+      fit-children: false
+
+  Label
+    id: topicTitle
+    anchors.top: topicRail.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 6
+    margin-left: 18
+    margin-right: 18
+    font: verdana-11px-rounded
+    color: #e9dec1
+
+  Label
+    id: stepCounter
+    anchors.top: topicTitle.bottom
+    anchors.left: topicTitle.left
+    anchors.right: topicTitle.right
+    margin-top: 2
+    color: #91a7b2
+
+  UIWidget
+    id: screenshot
+    anchors.top: stepCounter.bottom
+    anchors.left: topicTitle.left
+    anchors.right: topicTitle.right
+    margin-top: 6
+    height: 400
+    image-fixed-ratio: true
+    image-smooth: false
+    background-color: #10181d
+    border-width: 1
+    border-color: #40515a
+
+  Label
+    id: description
+    anchors.top: screenshot.bottom
+    anchors.left: screenshot.left
+    anchors.right: screenshot.right
+    margin-top: 6
+    height: 32
+    text-align: topCenter
+    text-wrap: true
+    font: verdana-11px-rounded
+    color: #d5c9a9
+
+  ProgressBar
+    id: progress
+    anchors.left: screenshot.left
+    anchors.right: screenshot.right
+    anchors.bottom: parent.bottom
+    margin-bottom: 52
+    height: 8
+    text: ""
+
+  Button
+    id: previous
+    anchors.left: screenshot.left
+    anchors.bottom: parent.bottom
+    margin-bottom: 14
+    width: 100
+    text: Previous
+
+  Button
+    id: next
+    anchors.right: screenshot.right
+    anchors.bottom: parent.bottom
+    margin-bottom: 14
+    width: 100
+    text: Next
+
+  Button
+    id: close
+    anchors.right: screenshot.right
+    anchors.bottom: parent.bottom
+    margin-bottom: 14
+    width: 100
+    text: Close

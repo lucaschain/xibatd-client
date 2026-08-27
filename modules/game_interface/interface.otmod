@@ -64,6 +64,7 @@ Module
     - game_xibat_turret
     - game_xibat_forge
     - game_xibat_ascension
+    - game_xibat_tutorial
 
   @onLoad: init()
   @onUnload: terminate()
