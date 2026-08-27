@@ -666,6 +666,7 @@ namespace Otc
         GameTaskboard = 134,
         GameProficiency = 135,
         GameTacticsWithoutFightMode = 136,
+        GameDoubleSoul = 137,
         LastGameFeature
     };
 

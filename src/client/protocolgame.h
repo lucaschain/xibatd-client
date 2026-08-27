@@ -208,6 +208,9 @@ public:
     int getRecivedPacketsSize() { return m_recivedPackedsSize; }
 
 private:
+    friend class ProtocolGameTestAccess;
+
+    static uint16_t parsePlayerSoul(const InputMessagePtr& msg);
     void parseStoreButtonIndicators(const InputMessagePtr& msg);
     void parseSetStoreDeepLink(const InputMessagePtr& msg);
     void parseStore(const InputMessagePtr& msg) const;

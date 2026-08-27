@@ -1,8 +1,43 @@
 local opcodeCallbacks = {}
 local extendedCallbacks = {}
 local extendedJSONCallbacks = {}
-local extendedJSONData = {}
 local maxPacketSize = 65000
+local maxJSONSize = 1024 * 1024
+
+local function decodeExtendedJSON(opcode, buffer, callback, protocol)
+    local status, data = pcall(json.decode, buffer)
+    if not status then
+        g_logger.error('Invalid data in extended JSON opcode ' .. opcode .. ': ' .. tostring(data))
+        return
+    end
+
+    callback(protocol, opcode, data)
+end
+
+local function clearExtendedJSONOpcode(opcode)
+    local protocol = g_game and g_game.getProtocolGame and g_game.getProtocolGame()
+    local fragments = protocol and protocol.extendedJSONData
+    if fragments then
+        fragments[opcode] = nil
+    end
+end
+
+local function appendExtendedJSONFragment(protocol, opcode, fragment)
+    local fragments = protocol.extendedJSONData
+    local data = fragments and fragments[opcode]
+    if not data then
+        return nil
+    end
+
+    if #data + #fragment > maxJSONSize then
+        fragments[opcode] = nil
+        g_logger.error('Extended JSON opcode ' .. opcode .. ' exceeded the reassembly limit')
+        return nil
+    end
+
+    fragments[opcode] = data .. fragment
+    return fragments[opcode]
+end
 
 function ProtocolGame:onOpcode(opcode, msg)
     for i, callback in pairs(opcodeCallbacks) do
@@ -24,25 +59,39 @@ function ProtocolGame:onExtendedOpcode(opcode, buffer)
     if callback then
         local status = buffer:sub(1, 1) -- O - just one message, S - start, P - part, E - end
         local data = buffer:sub(2)
-        if status ~= 'E' and status ~= 'P' then
-            extendedJSONData[opcode] = ''
-        end
-        if status ~= 'S' and status ~= 'P' and status ~= 'E' then
-            extendedJSONData[opcode] = buffer
-        else
-            extendedJSONData[opcode] = extendedJSONData[opcode] .. data
-        end
-        if status ~= 'S' and status ~= 'P' then
-            local json_status, json_data = pcall(function()
-                return json.decode(extendedJSONData[opcode])
-            end)
-            extendedJSONData[opcode] = nil
-            if not json_status then
-                error('Invalid data in extended JSON opcode (' .. json_status .. '): ' .. json_data)
+
+        if status == 'S' then
+            if #data > maxJSONSize then
+                g_logger.error('Extended JSON opcode ' .. opcode .. ' exceeded the reassembly limit')
+                if self.extendedJSONData then
+                    self.extendedJSONData[opcode] = nil
+                end
                 return
             end
-            callback(self, opcode, json_data)
+            self.extendedJSONData = self.extendedJSONData or {}
+            self.extendedJSONData[opcode] = data
+            return
         end
+
+        if status == 'P' or status == 'E' then
+            local reassembled = appendExtendedJSONFragment(self, opcode, data)
+            if not reassembled or status == 'P' then
+                return
+            end
+
+            self.extendedJSONData[opcode] = nil
+            decodeExtendedJSON(opcode, reassembled, callback, self)
+            return
+        end
+
+        if self.extendedJSONData then
+            self.extendedJSONData[opcode] = nil
+        end
+        if #buffer > maxJSONSize then
+            g_logger.error('Extended JSON opcode ' .. opcode .. ' exceeded the reassembly limit')
+            return
+        end
+        decodeExtendedJSON(opcode, buffer, callback, self)
     end
 end
 
@@ -99,6 +148,7 @@ function ProtocolGame.registerExtendedJSONOpcode(opcode, callback)
         error('Opcode is already taken.')
     end
 
+    clearExtendedJSONOpcode(opcode)
     extendedJSONCallbacks[opcode] = callback
 end
 
@@ -111,6 +161,7 @@ function ProtocolGame.unregisterExtendedJSONOpcode(opcode)
         error('Opcode is not registered.')
     end
 
+    clearExtendedJSONOpcode(opcode)
     extendedJSONCallbacks[opcode] = nil
 end
 

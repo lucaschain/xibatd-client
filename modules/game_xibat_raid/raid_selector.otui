@@ -1,0 +1,263 @@
+XibatRaidCard < Button
+  height: 76
+  margin-bottom: 5
+  text-align: left
+
+  Label
+    id: name
+    anchors.left: parent.left
+    anchors.top: parent.top
+    margin-left: 10
+    margin-top: 8
+    font: verdana-11px-rounded
+    color: #e8edf0
+    text-auto-resize: true
+    phantom: true
+
+  Label
+    id: mode
+    anchors.right: parent.right
+    anchors.top: parent.top
+    margin-right: 9
+    margin-top: 8
+    font: verdana-11px-rounded
+    color: #84b9c8
+    text-auto-resize: true
+    phantom: true
+
+  Label
+    id: status
+    anchors.left: parent.left
+    anchors.bottom: progress.top
+    margin-left: 10
+    margin-bottom: 4
+    color: #9da9b0
+    text-auto-resize: true
+    phantom: true
+
+  ProgressBar
+    id: progress
+    height: 10
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin-left: 10
+    margin-right: 10
+    margin-bottom: 8
+    background-color: #617782
+    phantom: true
+
+XibatRaidReward < Item
+  size: 36 36
+  draggable: false
+  virtual: true
+  margin-right: 4
+  margin-bottom: 4
+
+MainWindow
+  id: xibatRaidSelector
+  !text: tr('Raid Command')
+  size: 900 650
+  @onEscape: raidSelectorController:close()
+
+  Label
+    id: entriesTitle
+    anchors.left: parent.left
+    anchors.top: parent.top
+    !text: tr('Daily bonus entries')
+    color: #9da9b0
+    text-auto-resize: true
+
+  Label
+    id: entries
+    anchors.left: entriesTitle.right
+    anchors.top: parent.top
+    margin-left: 7
+    color: #f4d08a
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  Label
+    id: resetTitle
+    anchors.right: reset.left
+    anchors.top: parent.top
+    margin-right: 7
+    !text: tr('Rewards reset in')
+    color: #9da9b0
+    text-auto-resize: true
+
+  Label
+    id: reset
+    anchors.right: parent.right
+    anchors.top: parent.top
+    color: #f4d08a
+    font: verdana-11px-rounded
+    text: 00:00:00
+    text-auto-resize: true
+
+  HorizontalSeparator
+    id: headerSeparator
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: entriesTitle.bottom
+    margin-top: 8
+
+  Panel
+    id: listPanel
+    width: 250
+    anchors.left: parent.left
+    anchors.top: headerSeparator.bottom
+    anchors.bottom: closeButton.top
+    margin-top: 10
+    margin-bottom: 12
+
+    ScrollablePanel
+      id: raidList
+      anchors.fill: parent
+      anchors.right: listScroll.left
+      margin-right: 5
+      vertical-scrollbar: listScroll
+      layout:
+        type: verticalBox
+        fit-children: false
+
+    VerticalScrollBar
+      id: listScroll
+      anchors.top: parent.top
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      pixels-scroll: true
+      step: 40
+
+  VerticalSeparator
+    id: contentSeparator
+    anchors.left: listPanel.right
+    anchors.top: listPanel.top
+    anchors.bottom: listPanel.bottom
+    margin-left: 10
+
+  Panel
+    id: emptyDetail
+    anchors.left: contentSeparator.right
+    anchors.right: parent.right
+    anchors.top: listPanel.top
+    anchors.bottom: listPanel.bottom
+    margin-left: 18
+
+    Label
+      anchors.centerIn: parent
+      !text: tr('Select an available raid to inspect its route and rewards.')
+      color: #87949c
+      text-align: center
+      text-wrap: true
+      width: 300
+
+  Panel
+    id: detail
+    anchors.left: contentSeparator.right
+    anchors.right: parent.right
+    anchors.top: listPanel.top
+    anchors.bottom: listPanel.bottom
+    margin-left: 18
+    visible: false
+
+    Label
+      id: name
+      anchors.left: parent.left
+      anchors.top: parent.top
+      font: verdana-11px-rounded
+      color: #eef3f5
+      text-auto-resize: true
+
+    Label
+      id: tier
+      anchors.right: parent.right
+      anchors.top: parent.top
+      color: #f4d08a
+      text-auto-resize: true
+
+    Label
+      id: mode
+      anchors.left: parent.left
+      anchors.top: name.bottom
+      margin-top: 8
+      color: #84b9c8
+      text-auto-resize: true
+
+    Label
+      id: waves
+      anchors.right: parent.right
+      anchors.top: name.bottom
+      margin-top: 8
+      color: #b5c0c6
+      text-auto-resize: true
+
+    ProgressBar
+      id: progress
+      height: 14
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: mode.bottom
+      margin-top: 10
+      background-color: #617782
+
+    UIWidget
+      id: screenshot
+      size: 336 273
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.top: progress.bottom
+      margin-top: 12
+      image-fixed-ratio: true
+      image-smooth: false
+      background-color: #10181d
+      border-width: 1
+      border-color: #3d5363
+
+    Label
+      id: description
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: screenshot.bottom
+      margin-top: 12
+      height: 58
+      text-wrap: true
+      text-align: top-left
+      color: #c4ccd1
+
+    Label
+      id: rewardsTitle
+      anchors.left: parent.left
+      anchors.top: description.bottom
+      margin-top: 12
+      !text: tr('Possible rewards')
+      color: #9da9b0
+      text-auto-resize: true
+
+    Panel
+      id: rewards
+      height: 82
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: rewardsTitle.bottom
+      margin-top: 7
+      layout:
+        type: grid
+        cell-size: 40 40
+        num-columns: 10
+        flow: true
+
+    Button
+      id: startButton
+      height: 28
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      !text: tr('Deploy to Raid')
+
+  Button
+    id: closeButton
+    size: 120 24
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    !text: tr('Close')
+    @onClick: raidSelectorController:close()

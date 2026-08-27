@@ -1,0 +1,6 @@
+Module
+  name: game_xibat_core
+  description: Shared Xibat client protocol constants
+  author: Xibat
+  sandboxed: true
+  scripts: [ xibat ]

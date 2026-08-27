@@ -32,3 +32,6 @@ jobs:
             fi
           done < <(find data modules mods -type f -name "*.lua" -print0)
           exit "${failed}"
+
+      - name: Run Xibat protocol lifecycle tests
+        run: luajit tests/xibat_protocol_lifecycle_test.lua "$PWD"

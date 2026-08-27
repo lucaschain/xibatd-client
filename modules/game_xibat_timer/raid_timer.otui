@@ -1,0 +1,50 @@
+UIWidget
+  id: xibatRaidTimer
+  size: 184 58
+  anchors.top: parent.top
+  anchors.horizontalCenter: parent.horizontalCenter
+  margin-top: 74
+  background-color: #101820e8
+  border-width: 1
+  border-color: #3d5363
+  focusable: false
+  phantom: true
+  visible: false
+
+  UIWidget
+    id: accent
+    width: 4
+    anchors.left: parent.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    background-color: #e6a84a
+    phantom: true
+
+  Label
+    id: title
+    anchors.left: accent.right
+    anchors.right: parent.right
+    anchors.top: parent.top
+    margin-left: 12
+    margin-right: 10
+    margin-top: 7
+    font: verdana-11px-rounded
+    color: #aebbc5
+    text-align: center
+    text-auto-resize: true
+    phantom: true
+
+  Label
+    id: clock
+    anchors.left: accent.right
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin-left: 12
+    margin-right: 10
+    margin-bottom: 6
+    font: verdana-11px-rounded
+    color: #f4d08a
+    text: 00:00
+    text-align: center
+    text-auto-resize: true
+    phantom: true

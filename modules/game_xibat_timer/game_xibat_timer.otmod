@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_timer
+  description: Authoritative Xibat raid deadline display
+  author: Xibat
+  sandboxed: true
+  dependencies: [ game_interface, game_xibat_core ]
+  scripts: [ raid_timer ]
+  @onLoad: raidTimerController:init()
+  @onUnload: raidTimerController:terminate()

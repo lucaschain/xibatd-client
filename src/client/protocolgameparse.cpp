@@ -2626,7 +2626,7 @@ void ProtocolGame::parsePlayerStats(const InputMessagePtr& msg) const
         m_localPlayer->setBaseMagicLevel(baseMagicLevel);
     }
 
-    const uint8_t soul = g_game.getFeature(Otc::GameSoul) ? msg->getU8() : 0;
+    const uint16_t soul = parsePlayerSoul(msg);
     const uint16_t stamina = g_game.getFeature(Otc::GamePlayerStamina) ? msg->getU16() : 0;
     const uint16_t baseSpeed = g_game.getFeature(Otc::GameSkillsBase) ? msg->getU16() : 0;
     const uint16_t regeneration = g_game.getFeature(Otc::GamePlayerRegenerationTime) ? msg->getU16() : 0;
@@ -2662,6 +2662,13 @@ void ProtocolGame::parsePlayerStats(const InputMessagePtr& msg) const
     m_localPlayer->setBaseSpeed(baseSpeed);
     m_localPlayer->setRegenerationTime(regeneration);
     m_localPlayer->setOfflineTrainingTime(training);
+}
+
+uint16_t ProtocolGame::parsePlayerSoul(const InputMessagePtr& msg)
+{
+    if (!g_game.getFeature(Otc::GameSoul))
+        return 0;
+    return g_game.getFeature(Otc::GameDoubleSoul) ? msg->getU16() : msg->getU8();
 }
 
 void ProtocolGame::parsePlayerSkills(const InputMessagePtr& msg) const

@@ -49,7 +49,7 @@ public:
     void setManaShield(uint32_t manaShield, uint32_t maxManaShield);
     void setMagicLevel(uint16_t magicLevel, uint16_t magicLevelPercent);
     void setBaseMagicLevel(uint16_t baseMagicLevel);
-    void setSoul(uint8_t soul);
+    void setSoul(uint16_t soul);
     void setStamina(uint16_t stamina);
     void setKnown(const bool known) { m_known = known; }
     void setPendingGame(const bool pending) { m_pending = pending; }
@@ -82,7 +82,7 @@ public:
     uint16_t getMagicLevel() { return m_magicLevel; }
     uint16_t getMagicLevelPercent() { return m_magicLevelPercent; }
     uint16_t getBaseMagicLevel() { return m_baseMagicLevel; }
-    uint8_t getSoul() { return m_soul; }
+    uint16_t getSoul() { return m_soul; }
     uint16_t getLevelPercent();
     uint8_t getHarmony() { return m_harmony; }
 
@@ -220,7 +220,7 @@ private:
     uint16_t m_magicLevel{ 0 };
     uint16_t m_magicLevelPercent{ 0 };
     uint16_t m_baseMagicLevel{ 0 };
-    uint8_t m_soul{ 0 };
+    uint16_t m_soul{ 0 };
     uint16_t m_stamina{ 0 };
     uint16_t m_regenerationTime{ 0 };
     uint16_t m_offlineTrainingTime{ 0 };

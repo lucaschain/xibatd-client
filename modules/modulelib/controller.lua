@@ -136,6 +136,7 @@ Controller = {
     name = nil,
     attrs = nil,
     extendedOpcodes = nil,
+    extendedJSONOpcodes = nil,
     opcodes = nil,
     events = nil,
     uiEvents = nil,
@@ -162,6 +163,7 @@ function Controller:new()
         modalHandles = {},
         attrs = {},
         extendedOpcodes = {},
+        extendedJSONOpcodes = {},
         opcodes = {},
     }
     setmetatable(obj, self)
@@ -370,6 +372,10 @@ function Controller:terminate()
         ProtocolGame.unregisterExtendedOpcode(opcode)
     end
 
+    for _, opcode in pairs(self.extendedJSONOpcodes) do
+        ProtocolGame.unregisterExtendedJSONOpcode(opcode)
+    end
+
     for _, opcode in ipairs(self.opcodes) do
         ProtocolGame.unregisterOpcode(opcode)
     end
@@ -402,6 +408,7 @@ function Controller:terminate()
     self.events = nil
     self.dataUI = nil
     self.extendedOpcodes = nil
+    self.extendedJSONOpcodes = nil
     self.opcodes = nil
     self.keyboardEvents = nil
     self.keyboardAnchor = nil
@@ -457,6 +464,11 @@ function Controller:registerExtendedOpcode(opcode, fnc)
     table.insert(self.extendedOpcodes, opcode)
 end
 
+function Controller:registerExtendedJSONOpcode(opcode, fnc)
+    ProtocolGame.registerExtendedJSONOpcode(opcode, fnc)
+    table.insert(self.extendedJSONOpcodes, opcode)
+end
+
 function Controller:registerOpcode(opcode, fnc)
     ProtocolGame.registerOpcode(opcode, fnc)
     table.insert(self.opcodes, opcode)
@@ -466,6 +478,13 @@ function Controller:sendExtendedOpcode(opcode, ...)
     local protocol = g_game.getProtocolGame()
     if protocol then
         protocol:sendExtendedOpcode(opcode, ...)
+    end
+end
+
+function Controller:sendExtendedJSONOpcode(opcode, ...)
+    local protocol = g_game.getProtocolGame()
+    if protocol then
+        protocol:sendExtendedJSONOpcode(opcode, ...)
     end
 end
 
@@ -529,9 +548,17 @@ end
 
 function Controller:removeEvent(evt)
     if self.scheduledEvents[TypeEvent.GAME_INIT] then
-        if table.removevalue(self.scheduledEvents[TypeEvent.GAME_INIT], evt) then
-            removeEvent(evt)
-            return
+        local events = self.scheduledEvents[TypeEvent.GAME_INIT]
+        for key, eventId in pairs(events) do
+            if eventId == evt then
+                if type(key) == 'number' then
+                    table.remove(events, key)
+                else
+                    events[key] = nil
+                end
+                removeEvent(evt)
+                return
+            end
         end
     end
 

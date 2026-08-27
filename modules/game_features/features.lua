@@ -12,6 +12,7 @@ controller:registerEvents(g_game, {
         -- Xibat's 1098-derived SPR stores RGBA pixels.
         if version == 1098 then
             g_game.enableFeature(GameSpritesAlphaChannel)
+            g_game.enableFeature(GameDoubleSoul)
         end
 
         -- For Walk

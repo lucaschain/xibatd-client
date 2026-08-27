@@ -433,12 +433,12 @@ void LocalPlayer::setBaseMagicLevel(const uint16_t baseMagicLevel)
     callLuaField("onBaseMagicLevelChange", baseMagicLevel, oldBaseMagicLevel);
 }
 
-void LocalPlayer::setSoul(const uint8_t soul)
+void LocalPlayer::setSoul(const uint16_t soul)
 {
     if (m_soul == soul)
         return;
 
-    const uint8_t oldSoul = m_soul;
+    const uint16_t oldSoul = m_soul;
     m_soul = soul;
 
     callLuaField("onSoulChange", soul, oldSoul);

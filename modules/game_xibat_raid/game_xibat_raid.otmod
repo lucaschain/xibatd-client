@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_raid
+  description: Xibat raid selection and progression
+  author: Xibat
+  sandboxed: true
+  dependencies: [ game_interface, game_xibat_core ]
+  scripts: [ raid_selector ]
+  @onLoad: raidSelectorController:init()
+  @onUnload: raidSelectorController:terminate()

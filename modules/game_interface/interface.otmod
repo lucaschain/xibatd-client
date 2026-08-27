@@ -58,6 +58,9 @@ Module
     - game_taskboard
     - game_wheel
     - game_proficiency
+    - game_xibat_core
+    - game_xibat_timer
+    - game_xibat_raid
 
   @onLoad: init()
   @onUnload: terminate()
