@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_forge
+  description: Xibat turret rune forge
+  author: Xibat
+  sandboxed: true
+  dependencies: [ game_interface, game_xibat_core ]
+  scripts: [ forge ]
+  @onLoad: xibatForgeController:init()
+  @onUnload: xibatForgeController:terminate()

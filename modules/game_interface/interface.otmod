@@ -62,6 +62,7 @@ Module
     - game_xibat_timer
     - game_xibat_raid
     - game_xibat_turret
+    - game_xibat_forge
 
   @onLoad: init()
   @onUnload: terminate()
