@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_guidance
+  description: Xiba contextual target guidance
+  author: Xiba
+  sandboxed: true
+  dependencies: [ game_interface, game_minimap, game_xibat_core ]
+  scripts: [ guidance ]
+  @onLoad: xibatGuidanceController:init()
+  @onUnload: xibatGuidanceController:terminate()

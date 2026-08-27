@@ -1,0 +1,53 @@
+XibatGuidanceAttached < UIWidget
+  id: xibatGuidanceAttached
+  size: 160 42
+  phantom: true
+  focusable: false
+  margin-left: -80
+  margin-top: -58
+
+  UIWidget
+    id: arrow
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.bottom
+    size: 14 25
+    image-source: /images/ui/right-arrow
+    image-color: #ffd966
+    rotation: 90
+
+  Label
+    id: label
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: parent.top
+    width: 156
+    height: 16
+    text-align: center
+    color: #fff0a8
+    background-color: #111820cc
+    text-wrap: false
+
+XibatGuidanceEdge < UIWidget
+  id: xibatGuidanceEdge
+  size: 176 38
+  phantom: true
+  focusable: false
+
+  UIWidget
+    id: arrow
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    size: 14 25
+    image-source: /images/ui/right-arrow
+    image-color: #ffd966
+
+  Label
+    id: label
+    anchors.left: arrow.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 5
+    width: 154
+    height: 30
+    text-align: left
+    color: #fff0a8
+    background-color: #111820cc
+    text-wrap: true
