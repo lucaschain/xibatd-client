@@ -11,6 +11,13 @@ local function loadModule(path, environment)
     chunk()
 end
 
+local styleFile = assert(io.open(root .. '/modules/game_xibat_ascension/ascension.otui', 'rb'))
+local styleSource = styleFile:read('*a')
+styleFile:close()
+requireValue(not styleSource:match('\n%s*UIImage%s*\n') and
+    styleSource:match('\n%s*UIWidget%s*\n%s*id: icon'),
+    'Ascension symbolic icon must use the registered UIWidget type')
+
 local state = { callbacks = {}, sent = {}, events = {}, nextEvent = 1 }
 
 local function makeWidget()

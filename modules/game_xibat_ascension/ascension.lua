@@ -189,6 +189,10 @@ function xibatAscensionController:renderCategory()
     self.ui.categoryProgress:setText(tr('%d / %d points invested', category.spentPoints, category.maxPoints))
     for _, passive in ipairs(category.passives) do
         local card = g_ui.createWidget('AscensionNodeCard', self.ui.nodes)
+        if not card then
+            self.ui.message:setText(tr('The Ascension milestone board could not be rendered.'))
+            return
+        end
         local unlocked = category.spentPoints >= passive.unlockPoints
         local nextMilestone = category.spentPoints < passive.unlockPoints and
             category.spentPoints == passive.unlockPoints - passive.cost

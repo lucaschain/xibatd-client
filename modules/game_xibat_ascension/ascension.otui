@@ -20,7 +20,7 @@ AscensionNodeCard < Panel
     virtual: true
     phantom: true
 
-  UIImage
+  UIWidget
     id: icon
     size: 48 48
     anchors.top: parent.top
