@@ -130,13 +130,13 @@ function turretInspectorController:open(details)
             details.nextRange - details.currentRange))
     end
 
-    self.ui.soulBalance:setText(string.format(tr('Available soul: %g'), soul))
+    self.ui.soulBalance:setText(tr('Available soul: %g', soul))
     self.ui.upgradeButton:setEnabled(not isMaxLevel and hasSoul)
     self.ui.upgradeButton:setText(isMaxLevel and tr('Maximum Level') or
-        string.format(tr('Upgrade (-%g)'), details.soulRequiredForUpgrade))
+        tr('Upgrade (-%g)', details.soulRequiredForUpgrade))
     self.ui.upgradeButton:setTooltip(not isMaxLevel and not hasSoul and tr('Not enough soul.') or '')
     self.ui.sellButton:setEnabled(true)
-    self.ui.sellButton:setText(string.format(tr('Sell (+%g)'), details.sellPrice))
+    self.ui.sellButton:setText(tr('Sell (+%g)', details.sellPrice))
 
     local key = details.key
     self.ui.upgradeButton.onClick = function()

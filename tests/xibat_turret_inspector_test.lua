@@ -50,10 +50,7 @@ local environment = {
     Controller = {},
     g_game = {},
     tr = function(text, ...)
-        if select('#', ...) > 0 then
-            return string.format(text, ...)
-        end
-        return text
+        return string.format(text, ...)
     end,
 }
 
