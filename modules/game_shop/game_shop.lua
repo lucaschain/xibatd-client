@@ -266,13 +266,12 @@ function onGameShopFetchOffers(data)
     local categoryName = categories['Outfits'] and 'Outfits' or next(categories)
     if not categoryName then return end
     offers[categoryName] = {}
-    local sex = g_game.getLocalPlayer():getSex()
     for _, offer in ipairs(data.offers) do
         table.insert(offers[categoryName], {
             offerId = offer.offerId,
             parent = categoryName,
             name = offer.title,
-            id = sex == 0 and offer.looktypes[2] or offer.looktypes[1],
+            id = offer.looktype,
             price = offer.cost,
             isSecondPrice = false,
             count = 1,

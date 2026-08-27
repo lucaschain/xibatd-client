@@ -1,0 +1,11 @@
+Module
+  name: xiba_shop_e2e
+  description: Disposable authenticated Shop smoke driver
+  author: Xiba
+  sandboxed: true
+  autoload: true
+  autoload-priority: 9999
+  dependencies: [ client_entergame, game_shop, game_xibat_core ]
+  scripts: [ xiba_shop_e2e ]
+  @onLoad: init()
+  @onUnload: terminate()

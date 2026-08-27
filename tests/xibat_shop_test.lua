@@ -18,11 +18,11 @@ local function fieldCount(value)
 end
 
 local function valid(action, body)
-    return contract.validate({ version = 1, action = action, body = body })
+    return contract.validate({ version = 2, action = action, body = body })
 end
 
 local fetch = contract.fetchRequest()
-requireValue(fetch.version == 1 and fetch.action == 'fetch' and fieldCount(fetch) == 2,
+requireValue(fetch.version == 2 and fetch.action == 'fetch' and fieldCount(fetch) == 2,
     'Shop fetch request was not versioned')
 local description = contract.descriptionRequest('philosopher-outfit')
 requireValue(description.offerId == 'philosopher-outfit' and contract.descriptionRequest('other') == nil,
@@ -42,7 +42,8 @@ requireValue(valid('fetchOffers', {
     catalogRevision = 1,
     offers = { {
         offerId = 'philosopher-outfit', categoryId = 'outfits', type = 'outfit',
-        title = 'Philosopher Outfit', cost = 500, looktypes = { 873, 874 }, addons = 3, owned = false,
+        title = 'Philosopher Outfit', cost = 500, looktypes = { 873, 874 }, looktype = 873,
+        addons = 3, owned = false,
     } },
 }), 'valid Shop offer response was rejected')
 requireValue(valid('fetchDescription', {
@@ -59,26 +60,26 @@ requireValue(valid('msg', { ok = false, code = 'unavailable' }),
     'valid uncorrelated Shop availability result was rejected')
 
 local malformed = {
-    { version = 2, action = 'points', body = { points = 1 } },
-    { version = 1, action = 'points', body = { points = -1 } },
-    { version = 1, action = 'points', body = { points = 1, extra = true } },
-    { version = 1, action = 'fetchOffers', body = { catalogRevision = 1, offers = {} } },
-    { version = 1, action = 'fetchOffers', body = {
+    { version = 1, action = 'points', body = { points = 1 } },
+    { version = 2, action = 'points', body = { points = -1 } },
+    { version = 2, action = 'points', body = { points = 1, extra = true } },
+    { version = 2, action = 'fetchOffers', body = { catalogRevision = 1, offers = {} } },
+    { version = 2, action = 'fetchOffers', body = {
         catalogRevision = 1,
         offers = { {
             offerId = 'philosopher-outfit', categoryId = 'outfits', type = 'outfit',
             title = 'Philosopher Outfit', cost = 500,
-            looktypes = { 873, 874, extra = 999 }, addons = 3, owned = false,
+            looktypes = { 873, 874, extra = 999 }, looktype = 873, addons = 3, owned = false,
         } },
     } },
-    { version = 1, action = 'history', body = { entries = { extra = true } } },
-    { version = 1, action = 'msg', body = { requestId = 7, ok = true, code = 'ok' } },
-    { version = 1, action = 'msg', body = {
+    { version = 2, action = 'history', body = { entries = { extra = true } } },
+    { version = 2, action = 'msg', body = { requestId = 7, ok = true, code = 'ok' } },
+    { version = 2, action = 'msg', body = {
         requestId = 7, ok = false, code = 'ok', offerId = 'philosopher-outfit',
     } },
-    { version = 1, action = 'msg', body = { ok = false, code = 'unknown' } },
-    { version = 1, action = 'msg', body = { ok = true, code = 'ok' } },
-    { version = 1, action = 'msg', body = { ok = false, code = 'pending' } },
+    { version = 2, action = 'msg', body = { ok = false, code = 'unknown' } },
+    { version = 2, action = 'msg', body = { ok = true, code = 'ok' } },
+    { version = 2, action = 'msg', body = { ok = false, code = 'pending' } },
 }
 for _, payload in ipairs(malformed) do
     requireValue(contract.validate(payload) == nil, 'malformed Shop response was accepted')

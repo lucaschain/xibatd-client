@@ -1,6 +1,6 @@
 XibatShopContract = {}
 
-local VERSION = 1
+local VERSION = 2
 local MAX_HISTORY = 50
 local OFFER_ID = 'philosopher-outfit'
 local MESSAGE_CODES = {
@@ -80,11 +80,13 @@ function XibatShopContract.validate(payload)
         local offer = body.offers[1]
         if not exact(offer, {
             offerId = true, categoryId = true, type = true, title = true, cost = true,
-            looktypes = true, addons = true, owned = true,
+            looktypes = true, looktype = true, addons = true, owned = true,
         }) or offer.offerId ~= OFFER_ID or offer.categoryId ~= 'outfits' or offer.type ~= 'outfit' or
             not text(offer.title, 100) or not integer(offer.cost, 1, 2147483647) or
             not array(offer.looktypes, 2, 2) or
             not integer(offer.looktypes[1], 1, 65535) or not integer(offer.looktypes[2], 1, 65535) or
+            not integer(offer.looktype, 1, 65535) or
+            (offer.looktype ~= offer.looktypes[1] and offer.looktype ~= offer.looktypes[2]) or
             not integer(offer.addons, 0, 3) or type(offer.owned) ~= 'boolean' then return nil end
     elseif payload.action == 'fetchDescription' then
         if not exact(body, { offerId = true, description = true }) or body.offerId ~= OFFER_ID or
