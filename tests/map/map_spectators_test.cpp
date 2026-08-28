@@ -3,6 +3,7 @@
 #define private public
 #define protected public
 #include "client/map.h"
+#include "client/mapview.h"
 
 #include "client/creature.h"
 #include "client/gameconfig.h"
@@ -137,6 +138,19 @@ ThingPtr makeItem(const Position& position)
     auto item = std::make_shared<DummyItem>();
     item->setPosition(position);
     return item;
+}
+
+MapPosInfo makeProjectionInfo(const Position& camera)
+{
+    MapPosInfo info;
+    info.camera = camera;
+    info.drawOffset = { 32, 32 };
+    info.rect = Rect(100, 50, 480, 352);
+    info.srcRect = Rect(32, 32, 480, 352);
+    info.horizontalStretchFactor = 1.f;
+    info.verticalStretchFactor = 1.f;
+    info.scaleFactor = 1.f;
+    return info;
 }
 
 std::vector<CreaturePtr> expectedSpectatorsFromTile(Tile& tile)
@@ -512,4 +526,35 @@ TEST(MapSpectators, UniqueCreatures)
     const auto spectators = map.getSpectatorsInRangeEx(center, false, 1, 1, 0, 0);
     ASSERT_EQ(1u, spectators.size());
     EXPECT_EQ(shared, spectators.front());
+}
+
+TEST(MapViewProjection, ProjectsTileCentersAndFloors)
+{
+    const Position camera(100, 200, 7);
+    const auto info = makeProjectionInfo(camera);
+    const Point centerOffset(8, 6);
+
+    EXPECT_EQ(Point(340, 226), MapView::projectMapPoint(camera, Point(16, 16), 32, centerOffset, info, 1.f));
+    EXPECT_EQ(Point(372, 226),
+              MapView::projectMapPoint(camera.translated(1, 0), Point(16, 16), 32, centerOffset, info, 1.f));
+    EXPECT_EQ(Point(340, 258),
+              MapView::projectMapPoint(camera.translated(0, 1), Point(16, 16), 32, centerOffset, info, 1.f));
+    EXPECT_EQ(Point(308, 194),
+              MapView::projectMapPoint(camera.translated(0, 0, -1), Point(16, 16), 32, centerOffset, info, 1.f));
+    EXPECT_EQ(Point(226, 150), MapView::projectMapPoint(camera, Point(16, 16), 32, centerOffset, info, 1.5f));
+}
+
+TEST(MapViewProjection, AppliesCreatureWalkOffset)
+{
+    const Position camera(100, 200, 7);
+    const auto info = makeProjectionInfo(camera);
+
+    EXPECT_EQ(Point(340, 208), MapView::projectMapPoint(camera, Point(16, -2), 32, Point(8, 6), info, 1.f));
+    EXPECT_EQ(Point(324, 208), MapView::projectMapPoint(camera, Point(0, -2), 32, Point(8, 6), info, 1.f));
+}
+
+TEST(MapViewProjection, RejectsInvalidInputs)
+{
+    const auto info = makeProjectionInfo(Position(100, 200, 7));
+    EXPECT_EQ(Point(-1, -1), MapView::projectMapPoint({}, Point(16, 16), 32, Point(8, 6), info, 1.f));
 }

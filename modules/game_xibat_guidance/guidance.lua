@@ -2,6 +2,7 @@ local GUIDANCE_OPCODE = modules.game_xibat_core.XibatOpcode.Guidance
 local PROTOCOL_VERSION = 1
 local EDGE_INSET = 12
 local TARGET_GAP = 8
+local SMOOTH_REFRESH_INTERVAL = 16
 local MINIMAP_ICON = '/images/game/minimap/flag18'
 
 local targetMetadata = {
@@ -85,10 +86,20 @@ function xibatGuidanceController:destroyWidget(field)
 end
 
 function xibatGuidanceController:cleanup()
+    if self.refreshEvent then
+        self:removeEvent(self.refreshEvent)
+        self.refreshEvent = nil
+    end
     self:destroyWidget('edgeWidget')
     self:destroyWidget('minimapMarker')
     self.lastRenderLog = nil
     self.target = nil
+end
+
+function xibatGuidanceController:startSmoothRefresh()
+    if self.refreshEvent or not self.gameReady or not self.target then return end
+    self.refreshEvent = self:cycleEvent(function() self:refresh() end, SMOOTH_REFRESH_INTERVAL,
+        'xibatGuidanceSmoothRefresh')
 end
 
 function xibatGuidanceController:resolveCreature()
@@ -132,22 +143,18 @@ function xibatGuidanceController:getBanner(panel)
     return widget
 end
 
-function xibatGuidanceController:showNearby(panel, targetPosition)
+function xibatGuidanceController:showNearby(panel, targetPosition, creature)
     if targetPosition.z ~= panel:getCameraPosition().z or not panel:isInRange(targetPosition) then return false end
-    local dimension = panel:getVisibleDimension()
-    if not dimension or dimension.width < 1 or dimension.height < 1 then return false end
+    local anchor = creature and panel:getCreaturePositionPoint(creature) or panel:getMapPositionPoint(targetPosition)
+    if not anchor or anchor.x < 0 or anchor.y < 0 then return false end
 
     local widget = self:getBanner(panel)
     if not widget then return false end
     widget.label:setText(self.target.label)
 
     local rect = panel:getRect()
-    local camera = panel:getCameraPosition()
-    local tileWidth = rect.width / dimension.width
-    local tileHeight = rect.height / dimension.height
-    local x = rect.x + rect.width / 2 + (targetPosition.x - camera.x) * tileWidth - widget:getWidth() / 2
-    local y = rect.y + rect.height / 2 + (targetPosition.y - camera.y) * tileHeight -
-        tileHeight - widget:getHeight() - TARGET_GAP
+    local x = anchor.x - widget:getWidth() / 2
+    local y = anchor.y - widget:getHeight() - TARGET_GAP
     x = math.max(rect.x + EDGE_INSET, math.min(x, rect.x + rect.width - widget:getWidth() - EDGE_INSET))
     y = math.max(rect.y + EDGE_INSET, math.min(y, rect.y + rect.height - widget:getHeight() - EDGE_INSET))
     widget:setPosition({ x = math.floor(x), y = math.floor(y) })
@@ -199,7 +206,7 @@ function xibatGuidanceController:refresh()
         if minimap and not minimap:isDestroyed() then minimap:centerInPosition(self.minimapMarker, self.minimapMarker.pos) end
     end
 
-    local nearby = self:showNearby(panel, targetPosition)
+    local nearby = self:showNearby(panel, targetPosition, creature)
     local mode = nearby and 'nearby' or
         (self:showEdge(panel, playerPosition, targetPosition) and 'edge' or 'none')
     local renderLog = string.format('%s:%s:%d:%d:%d:%s', self.target.target, mode,
@@ -247,6 +254,7 @@ function xibatGuidanceController:onOpcode(_, _, payload)
         return
     end
     self:createMinimapMarker(self.target.position, self.target.label)
+    self:startSmoothRefresh()
     self:refresh()
 end
 
@@ -274,6 +282,7 @@ function xibatGuidanceController:onGameStart()
     if self.target and not widgetAlive(self.minimapMarker) then
         self:createMinimapMarker(self.target.position, self.target.label)
     end
+    self:startSmoothRefresh()
     self:refresh()
 end
 

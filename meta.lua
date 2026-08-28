@@ -3076,6 +3076,14 @@ function UIMap:getCameraPosition() end
 ---@return Position
 function UIMap:getPosition(mousePos) end
 
+---@param position Position
+---@return Point
+function UIMap:getMapPositionPoint(position) end
+
+---@param creature Creature
+---@return Point
+function UIMap:getCreaturePositionPoint(creature) end
+
 ---@param mousePos Point | string
 ---@return Tile | nil
 function UIMap:getTile(mousePos) end

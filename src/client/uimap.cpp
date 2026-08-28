@@ -162,6 +162,10 @@ Position UIMap::getCameraPosition() { return m_mapView->getCameraPosition(); }
 
 Position UIMap::getPosition(const Point& mousePos) { return m_mapView->getPosition(mousePos); }
 
+Point UIMap::getMapPositionPoint(const Position& position) { return m_mapView->getMapPositionPoint(position); }
+
+Point UIMap::getCreaturePositionPoint(const CreaturePtr& creature) { return m_mapView->getCreaturePositionPoint(creature); }
+
 TilePtr UIMap::getTile(const Point& mousePos) { return m_mapView->getTopTile(getPosition(mousePos)); }
 
 Size UIMap::getVisibleDimension() { return m_mapView->getVisibleDimension(); }

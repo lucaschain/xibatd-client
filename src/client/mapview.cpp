@@ -774,6 +774,51 @@ Position MapView::getPosition(const Point& mousePos)
     return getPosition(relativeMousePos, m_posInfo.rect.size());
 }
 
+Point MapView::projectMapPoint(const Position& position, const Point& framebufferOffset) const
+{
+    return projectMapPoint(position, framebufferOffset, m_tileSize, m_virtualCenterOffset, m_posInfo, g_app.getHUDScale());
+}
+
+Point MapView::projectMapPoint(const Position& position, const Point& framebufferOffset, const uint16_t tileSize,
+                               const Point& virtualCenterOffset, const MapPosInfo& posInfo, const float hudScale)
+{
+    if (!position.isValid() || tileSize == 0 || posInfo.rect.isEmpty() || posInfo.srcRect.isEmpty())
+        return { -1, -1 };
+
+    const auto floorOffset = posInfo.camera.z - position.z;
+    Point point(
+        (virtualCenterOffset.x + position.x - posInfo.camera.x - floorOffset) * tileSize,
+        (virtualCenterOffset.y + position.y - posInfo.camera.y - floorOffset) * tileSize);
+    point += framebufferOffset - posInfo.drawOffset;
+    point.x *= posInfo.horizontalStretchFactor;
+    point.y *= posInfo.verticalStretchFactor;
+    point += posInfo.rect.topLeft();
+
+    if (hudScale != DEFAULT_DISPLAY_DENSITY)
+        point.scale(hudScale);
+
+    return point;
+}
+
+Point MapView::getMapPositionPoint(const Position& position) const
+{
+    return projectMapPoint(position, Point(m_tileSize / 2));
+}
+
+Point MapView::getCreaturePositionPoint(const CreaturePtr& creature) const
+{
+    if (!creature || !creature->getPosition().isValid())
+        return { -1, -1 };
+
+    const auto displacementX = g_game.getFeature(Otc::GameNegativeOffset) ? 0 : creature->getDisplacementX();
+    const auto displacementY = g_game.getFeature(Otc::GameNegativeOffset) ? 0 : creature->getDisplacementY();
+    const auto jumpOffset = creature->getJumpOffset() * m_posInfo.scaleFactor;
+    const auto creatureOffset = Point(16 - displacementX, -displacementY - 2) + creature->getDrawOffset();
+    const Point framebufferOffset = creatureOffset * m_posInfo.scaleFactor -
+        Point(std::round(jumpOffset.x), std::round(jumpOffset.y));
+    return projectMapPoint(creature->getPosition(), framebufferOffset);
+}
+
 Position MapView::getPosition(const Point& point, const Size& mapSize)
 {
     const auto& cameraPosition = getCameraPosition();

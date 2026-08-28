@@ -34,6 +34,8 @@ local state = {
     created = {},
     tiles = {},
     logs = {},
+    mapProjection = { x = 274, y = 180 },
+    creatureProjection = { x = 300, y = 190 },
 }
 
 local function makeWidget(kind)
@@ -96,6 +98,8 @@ function panel:getRect() return { x = 20, y = 30, width = self.width, height = s
 function panel:isInRange() return state.visible end
 function panel:getCameraPosition() return player:getPosition() end
 function panel:getVisibleDimension() return { width = 15, height = 11 } end
+function panel:getMapPositionPoint() return state.mapProjection end
+function panel:getCreaturePositionPoint() return state.creatureProjection end
 function panel:getSpectators(multifloor)
     state.spectatorMultifloor = multifloor
     return state.spectators or {}
@@ -128,6 +132,14 @@ function environment.Controller:new()
     local controller = {}
     function controller:registerExtendedJSONOpcode(opcode, callback) state.callbacks[opcode] = callback end
     function controller:registerEvents(actor, events) state.events[actor] = events end
+    function controller:cycleEvent(callback, delay)
+        state.smoothCallback = callback
+        state.smoothDelay = delay
+        return callback
+    end
+    function controller:removeEvent(event)
+        if state.smoothCallback == event then state.smoothCallback = nil end
+    end
     return controller
 end
 function environment.g_ui.importStyle(path) state.style = path end
@@ -199,7 +211,10 @@ requireValue(controller.target and not controller.edgeWidget and not controller.
 controller:onGameStart()
 requireValue(controller.edgeWidget and controller.minimapMarker,
     'game start did not render deferred guidance')
+requireValue(state.smoothCallback and state.smoothDelay == 16,
+    'game start did not create the lifecycle-owned smooth refresh')
 state.callbacks[209](nil, 209, clearPacket)
+requireValue(not state.smoothCallback, 'clear did not cancel smooth refresh')
 
 local expectedMetadata = {
     sergio = { kind = 'npc', label = 'Talk to Sergio Rocket', name = 'Sergio Rocket' },
@@ -263,6 +278,12 @@ requireValue(controller.edgeWidget and #impostor.attachments == 0 and #sergio.at
     controller.edgeWidget.label.text == 'Talk to Sergio Rocket' and npcMarker.centered.x == 103 and
     state.spectatorMultifloor == false,
     'NPC scan did not require isNpc() and derive the local name')
+
+local beforeSmoothMove = controller.edgeWidget.position.x
+state.creatureProjection = { x = 340, y = 190 }
+state.smoothCallback()
+requireValue(controller.edgeWidget.position.x > beforeSmoothMove,
+    'smooth refresh did not follow the native creature projection')
 
 sergio.position = { x = 105, y = 106, z = 9 }
 state.events[environment.Creature].onPositionChange(sergio)

@@ -98,6 +98,11 @@ public:
 
     Position getPosition(const Point& mousePos);
 
+    Point getMapPositionPoint(const Position& position) const;
+    Point getCreaturePositionPoint(const CreaturePtr& creature) const;
+    static Point projectMapPoint(const Position& position, const Point& framebufferOffset, uint16_t tileSize,
+                                 const Point& virtualCenterOffset, const MapPosInfo& posInfo, float hudScale);
+
     MapViewPtr asMapView() { return static_self_cast<MapView>(); }
 
     void resetLastCamera() { m_lastCameraPosition = {}; }
@@ -153,6 +158,8 @@ protected:
     friend class LightView;
 
 private:
+    Point projectMapPoint(const Position& position, const Point& framebufferOffset) const;
+
     enum class FadeType
     {
         NONE, FADE_IN, FADE_OUT
