@@ -18,6 +18,8 @@ requireValue(not moduleSource:match('autoWalk') and not moduleSource:match('walk
     'guidance first slice must not initiate walking')
 requireValue(not moduleSource:match('registerUIEvents'),
     'map geometry must use regular controller events')
+requireValue(not moduleSource:match('attachWidget') and not moduleSource:match('setRotation'),
+    'guidance must not use crash-prone native attachment or rotation paths')
 
 local interfaceFile = assert(io.open(root .. '/modules/game_interface/interface.otmod', 'rb'))
 local interfaceSource = interfaceFile:read('*a')
@@ -31,6 +33,7 @@ local state = {
     visible = true,
     created = {},
     tiles = {},
+    logs = {},
 }
 
 local function makeWidget(kind)
@@ -91,6 +94,8 @@ local panel = makeWidget('mapPanel')
 panel.width, panel.height = 400, 300
 function panel:getRect() return { x = 20, y = 30, width = self.width, height = self.height } end
 function panel:isInRange() return state.visible end
+function panel:getCameraPosition() return player:getPosition() end
+function panel:getVisibleDimension() return { width = 15, height = 11 } end
 function panel:getSpectators(multifloor)
     state.spectatorMultifloor = multifloor
     return state.spectators or {}
@@ -116,6 +121,7 @@ local environment = {
     g_ui = {},
     g_game = {},
     g_map = {},
+    g_logger = {},
 }
 
 function environment.Controller:new()
@@ -135,6 +141,7 @@ function environment.g_game.getLocalPlayer() return player end
 function environment.g_map.getTile(position)
     return state.tiles[string.format('%d:%d:%d', position.x, position.y, position.z)]
 end
+function environment.g_logger.warning(message) table.insert(state.logs, message) end
 
 local function showPacket(target, position)
     return {
@@ -151,6 +158,8 @@ local controller = environment.xibatGuidanceController
 controller:onInit()
 requireValue(state.style == 'guidance.otui' and state.callbacks[209] and not state.callbacks[208],
     'guidance did not register its independent opcode and style')
+requireValue(state.logs[1] and state.logs[1]:match('initializing opcode=209'),
+    'guidance initialization was not logged')
 requireValue(state.events[environment.LocalPlayer].onPositionChange and
     state.events[environment.Creature].onAppear and state.events[environment.Creature].onDisappear and
     state.events[environment.Creature].onPositionChange and state.events[environment.UIMap].onZoomChange and
@@ -184,12 +193,20 @@ end
 local nilOk = pcall(state.callbacks[209], nil, 209, nil)
 requireValue(nilOk and not controller.target, 'nil guidance packet escaped')
 
+state.callbacks[209](nil, 209, showPacket('sergio'))
+requireValue(controller.target and not controller.edgeWidget and not controller.minimapMarker,
+    'guidance created widgets before game start')
+controller:onGameStart()
+requireValue(controller.edgeWidget and controller.minimapMarker,
+    'game start did not render deferred guidance')
+state.callbacks[209](nil, 209, clearPacket)
+
 local expectedMetadata = {
-    sergio = { kind = 'npc', label = 'Sergio Rocket', name = 'Sergio Rocket' },
-    nicolai = { kind = 'npc', label = 'Nicolai F', name = 'Nicolai F' },
-    raidSelector = { kind = 'tile', label = 'Raid Selector' },
-    globe = { kind = 'tile', label = 'Raid Globe' },
-    araci = { kind = 'npc', label = 'Araci', name = 'Araci' },
+    sergio = { kind = 'npc', label = 'Talk to Sergio Rocket', name = 'Sergio Rocket' },
+    nicolai = { kind = 'npc', label = 'Get a free turret rune from Nicolai F', name = 'Nicolai F' },
+    raidSelector = { kind = 'tile', label = 'Use the Raid Selector' },
+    globe = { kind = 'tile', label = 'Use the Raid Globe to start the wave' },
+    araci = { kind = 'npc', label = 'Talk to Araci', name = 'Araci' },
 }
 state.visible = false
 for _, target in ipairs({ 'sergio', 'nicolai', 'raidSelector', 'globe', 'araci' }) do
@@ -208,24 +225,32 @@ state.callbacks[209](nil, 209, clearPacket)
 
 state.visible = true
 state.callbacks[209](nil, 209, showPacket('raidSelector'))
-local firstAttached = controller.attachedWidget
+local firstBanner = controller.edgeWidget
 local firstMarker = controller.minimapMarker
-requireValue(firstAttached and #tile.attachments == 1 and firstAttached.label.text == 'Raid Selector',
-    'visible raid-selector tile guidance was not attached')
+requireValue(firstBanner and firstBanner.label.text == 'Use the Raid Selector' and #tile.attachments == 0 and
+    firstBanner.position.x > 32 and firstBanner.position.x < 232 and
+    firstBanner.position.y > 42 and firstBanner.position.y < 288,
+    'nearby raid-selector banner was not positioned above its target')
 requireValue(firstMarker and firstMarker.temporary and firstMarker.icon == '/images/game/minimap/flag18' and
     minimap.children[1] == firstMarker and not existingPlayerFlag.destroyed,
     'temporary minimap marker replaced or destroyed an existing player flag')
+requireValue(state.logs[#state.logs]:match('render target=raidSelector mode=nearby'),
+    'guidance render state was not logged')
 
 state.visible = false
 state.events[environment.UIMap].onZoomChange()
 local edge = controller.edgeWidget
-requireValue(firstAttached.destroyed and tile.detachCount == 1 and edge and edge.arrow.rotation == 0 and
+requireValue(edge == firstBanner and
+    edge.label.text == '[E] Use the Raid Selector' and
     edge.position.x >= 32 and edge.position.x + edge.width <= 408 and
     edge.position.y >= 42 and edge.position.y + edge.height <= 318,
-    'attached cleanup or offscreen arrow clamping failed')
+    'compass banner clamping failed')
+state.callbacks[209](nil, 209, showPacket('raidSelector', { x = 100, y = 110, z = 7 }))
+requireValue(controller.edgeWidget and controller.edgeWidget.label.text == '[S] Use the Raid Selector',
+    'southbound compass direction was incorrect')
 controller:cleanup()
 controller:cleanup()
-requireValue(tile.detachCount == 1, 'direct attached-widget destruction was not idempotent')
+requireValue(firstBanner.destroyed, 'compass banner destruction was not idempotent')
 
 player.position = { x = 100, y = 100, z = 9 }
 local impostor = makeAttachable({ x = 101, y = 101, z = 9 }, 76, 'Sergio Rocket', false)
@@ -234,8 +259,8 @@ state.spectators = { impostor, sergio }
 state.visible = true
 state.callbacks[209](nil, 209, showPacket('sergio', { x = 110, y = 110, z = 9 }))
 local npcMarker = controller.minimapMarker
-requireValue(controller.attachedWidget and #impostor.attachments == 0 and #sergio.attachments == 1 and
-    controller.attachedWidget.label.text == 'Sergio Rocket' and npcMarker.centered.x == 103 and
+requireValue(controller.edgeWidget and #impostor.attachments == 0 and #sergio.attachments == 0 and
+    controller.edgeWidget.label.text == 'Talk to Sergio Rocket' and npcMarker.centered.x == 103 and
     state.spectatorMultifloor == false,
     'NPC scan did not require isNpc() and derive the local name')
 
@@ -244,32 +269,37 @@ state.events[environment.Creature].onPositionChange(sergio)
 requireValue(npcMarker.centered.x == 105 and npcMarker.centered.y == 106,
     'NPC movement did not refresh the temporary marker')
 
-local beforeDisappear = controller.attachedWidget
 sergio.removed = true
 state.spectators = { impostor }
 state.events[environment.Creature].onDisappear(sergio)
-requireValue(beforeDisappear.destroyed and sergio.detachCount == 1 and controller.edgeWidget and
-    npcMarker.centered.x == 110, 'NPC disappearance retained stale object authority')
+requireValue(controller.edgeWidget and npcMarker.centered.x == 110,
+    'NPC disappearance retained stale object authority')
 sergio.removed = false
 state.spectators = { sergio }
 state.events[environment.Creature].onAppear(sergio)
-requireValue(controller.attachedWidget and npcMarker.centered.x == 105,
+requireValue(controller.edgeWidget and npcMarker.centered.x == 105,
     'NPC appearance did not re-resolve by local name')
 
-local activeWidget, activeMarker = controller.attachedWidget, controller.minimapMarker
+local activeWidget, activeMarker = controller.edgeWidget, controller.minimapMarker
 state.callbacks[209](nil, 209, clearPacket)
 state.callbacks[209](nil, 209, clearPacket)
 requireValue(activeWidget.destroyed and activeMarker.destroyed and not controller.target and
     not existingPlayerFlag.destroyed, 'clear was not idempotent or removed an existing player flag')
 
 state.callbacks[209](nil, 209, showPacket('globe'))
-local logoutWidget, logoutMarker = controller.attachedWidget or controller.edgeWidget, controller.minimapMarker
+local logoutWidget, logoutMarker = controller.edgeWidget, controller.minimapMarker
 controller:onGameEnd()
 requireValue(logoutWidget.destroyed and logoutMarker.destroyed and not controller.target,
     'logout did not clean guidance state')
 state.callbacks[209](nil, 209, showPacket('araci'))
-requireValue(controller.target, 'reconnect did not accept a new show packet')
-local terminateWidget = controller.attachedWidget or controller.edgeWidget
+requireValue(controller.target and not controller.minimapMarker,
+    'reconnect guidance rendered before game start')
+controller:onGameStart()
+local reconnectMarker = controller.minimapMarker
+requireValue(controller.target and controller.target.target == 'araci' and reconnectMarker and
+    not reconnectMarker.destroyed,
+    'game start discarded guidance received during login')
+local terminateWidget = controller.edgeWidget
 controller:onTerminate()
 controller:onTerminate()
 requireValue(terminateWidget.destroyed and not controller.target and not existingPlayerFlag.destroyed,

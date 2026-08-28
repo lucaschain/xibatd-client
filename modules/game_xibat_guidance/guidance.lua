@@ -1,17 +1,22 @@
 local GUIDANCE_OPCODE = modules.game_xibat_core.XibatOpcode.Guidance
 local PROTOCOL_VERSION = 1
-local ARROW_INSET = 12
+local EDGE_INSET = 12
+local TARGET_GAP = 8
 local MINIMAP_ICON = '/images/game/minimap/flag18'
 
 local targetMetadata = {
-    sergio = { kind = 'npc', name = 'Sergio Rocket', label = 'Sergio Rocket' },
-    nicolai = { kind = 'npc', name = 'Nicolai F', label = 'Nicolai F' },
-    raidSelector = { kind = 'tile', label = 'Raid Selector' },
-    globe = { kind = 'tile', label = 'Raid Globe' },
-    araci = { kind = 'npc', name = 'Araci', label = 'Araci' },
+    sergio = { kind = 'npc', name = 'Sergio Rocket', label = 'Talk to Sergio Rocket' },
+    nicolai = { kind = 'npc', name = 'Nicolai F', label = 'Get a free turret rune from Nicolai F' },
+    raidSelector = { kind = 'tile', label = 'Use the Raid Selector' },
+    globe = { kind = 'tile', label = 'Use the Raid Globe to start the wave' },
+    araci = { kind = 'npc', name = 'Araci', label = 'Talk to Araci' },
 }
 
 xibatGuidanceController = Controller:new()
+
+local function log(message)
+    g_logger.warning('[XibatGuidance] ' .. message)
+end
 
 local function hasExactFields(value, required)
     if type(value) ~= 'table' then return false end
@@ -65,6 +70,14 @@ local function floorSuffix(playerPosition, targetPosition)
     return string.format('\n%d floor%s %s', floors, floors == 1 and '' or 's', direction)
 end
 
+local function compassDirection(dx, dy)
+    local horizontal = dx < 0 and 'W' or (dx > 0 and 'E' or '')
+    local vertical = dy < 0 and 'N' or (dy > 0 and 'S' or '')
+    if math.abs(dx) > math.abs(dy) * 2 then return horizontal end
+    if math.abs(dy) > math.abs(dx) * 2 then return vertical end
+    return vertical .. horizontal
+end
+
 function xibatGuidanceController:destroyWidget(field)
     local widget = self[field]
     self[field] = nil
@@ -72,10 +85,9 @@ function xibatGuidanceController:destroyWidget(field)
 end
 
 function xibatGuidanceController:cleanup()
-    self:destroyWidget('attachedWidget')
     self:destroyWidget('edgeWidget')
     self:destroyWidget('minimapMarker')
-    self.attachmentKey = nil
+    self.lastRenderLog = nil
     self.target = nil
 end
 
@@ -92,9 +104,15 @@ end
 
 function xibatGuidanceController:createMinimapMarker(position, label)
     local minimap = modules.game_minimap.getMiniMapUi()
-    if not minimap or minimap:isDestroyed() then return end
+    if not minimap or minimap:isDestroyed() then
+        log('minimap unavailable')
+        return
+    end
     local marker = g_ui.createWidget('MinimapFlag')
-    if not marker then return end
+    if not marker then
+        log('failed to create minimap marker')
+        return
+    end
     minimap:insertChild(1, marker)
     marker.pos = { x = position.x, y = position.y, z = position.z }
     marker.temporary = true
@@ -104,56 +122,70 @@ function xibatGuidanceController:createMinimapMarker(position, label)
     self.minimapMarker = marker
 end
 
-function xibatGuidanceController:showAttached(targetObject, attachmentKey)
-    self:destroyWidget('edgeWidget')
-    if widgetAlive(self.attachedWidget) and self.attachmentKey == attachmentKey then return end
-    self:destroyWidget('attachedWidget')
-    local widget = g_ui.createWidget('XibatGuidanceAttached')
-    if not widget then return end
-    widget.label:setText(self.target.label)
-    self.attachedWidget = widget
-    self.attachmentKey = attachmentKey
-    targetObject:attachWidget(widget)
-end
-
-function xibatGuidanceController:showEdge(playerPosition, targetPosition)
-    self:destroyWidget('attachedWidget')
-    self.attachmentKey = nil
-    local panel = modules.game_interface.getMapPanel()
-    if not panel or panel:isDestroyed() then return end
-
+function xibatGuidanceController:getBanner(panel)
     local widget = self.edgeWidget
     if not widgetAlive(widget) then
         widget = g_ui.createWidget('XibatGuidanceEdge', panel)
-        if not widget then return end
+        if not widget then return nil end
         self.edgeWidget = widget
     end
+    return widget
+end
 
-    widget.label:setText(self.target.label .. floorSuffix(playerPosition, targetPosition))
+function xibatGuidanceController:showNearby(panel, targetPosition)
+    if targetPosition.z ~= panel:getCameraPosition().z or not panel:isInRange(targetPosition) then return false end
+    local dimension = panel:getVisibleDimension()
+    if not dimension or dimension.width < 1 or dimension.height < 1 then return false end
+
+    local widget = self:getBanner(panel)
+    if not widget then return false end
+    widget.label:setText(self.target.label)
+
+    local rect = panel:getRect()
+    local camera = panel:getCameraPosition()
+    local tileWidth = rect.width / dimension.width
+    local tileHeight = rect.height / dimension.height
+    local x = rect.x + rect.width / 2 + (targetPosition.x - camera.x) * tileWidth - widget:getWidth() / 2
+    local y = rect.y + rect.height / 2 + (targetPosition.y - camera.y) * tileHeight -
+        tileHeight - widget:getHeight() - TARGET_GAP
+    x = math.max(rect.x + EDGE_INSET, math.min(x, rect.x + rect.width - widget:getWidth() - EDGE_INSET))
+    y = math.max(rect.y + EDGE_INSET, math.min(y, rect.y + rect.height - widget:getHeight() - EDGE_INSET))
+    widget:setPosition({ x = math.floor(x), y = math.floor(y) })
+    return true
+end
+
+function xibatGuidanceController:showEdge(panel, playerPosition, targetPosition)
+    local widget = self:getBanner(panel)
+    if not widget then return false end
+
     local dx = targetPosition.x - playerPosition.x
     local dy = targetPosition.y - playerPosition.y
     if dx == 0 and dy == 0 then dy = targetPosition.z < playerPosition.z and -1 or 1 end
-    widget.arrow:setRotation(math.deg(math.atan2(dy, dx)))
+    widget.label:setText(string.format('[%s] %s%s', compassDirection(dx, dy), self.target.label,
+        floorSuffix(playerPosition, targetPosition)))
 
     local rect = panel:getRect()
-    local halfWidth = math.max(1, rect.width / 2 - widget:getWidth() / 2 - ARROW_INSET)
-    local halfHeight = math.max(1, rect.height / 2 - widget:getHeight() / 2 - ARROW_INSET)
+    local halfWidth = math.max(1, rect.width / 2 - widget:getWidth() / 2 - EDGE_INSET)
+    local halfHeight = math.max(1, rect.height / 2 - widget:getHeight() / 2 - EDGE_INSET)
     local scale = math.min(halfWidth / math.max(math.abs(dx), 0.001),
         halfHeight / math.max(math.abs(dy), 0.001))
     local x = rect.x + rect.width / 2 + dx * scale - widget:getWidth() / 2
     local y = rect.y + rect.height / 2 + dy * scale - widget:getHeight() / 2
-    x = math.max(rect.x + ARROW_INSET, math.min(x, rect.x + rect.width - widget:getWidth() - ARROW_INSET))
-    y = math.max(rect.y + ARROW_INSET, math.min(y, rect.y + rect.height - widget:getHeight() - ARROW_INSET))
+    x = math.max(rect.x + EDGE_INSET, math.min(x, rect.x + rect.width - widget:getWidth() - EDGE_INSET))
+    y = math.max(rect.y + EDGE_INSET, math.min(y, rect.y + rect.height - widget:getHeight() - EDGE_INSET))
     widget:setPosition({ x = math.floor(x), y = math.floor(y) })
+    return true
 end
 
 function xibatGuidanceController:refresh()
-    if self.terminated or self.refreshing or not self.target or not g_game.isOnline() then return end
+    if self.terminated or not self.gameReady or self.refreshing or not self.target or not g_game.isOnline() then return end
     self.refreshing = true
 
     local player = g_game.getLocalPlayer()
     local panel = modules.game_interface.getMapPanel()
     if not player or not panel or panel:isDestroyed() then
+        log(string.format('render deferred target=%s player=%s panel=%s', self.target.target,
+            player and 'ready' or 'missing', panel and not panel:isDestroyed() and 'ready' or 'missing'))
         self.refreshing = false
         return
     end
@@ -161,32 +193,40 @@ function xibatGuidanceController:refresh()
     local creature = self:resolveCreature()
     local targetPosition = creature and creature:getPosition() or self.target.position
     local playerPosition = player:getPosition()
-    local visible = targetPosition.z == playerPosition.z and panel:isInRange(targetPosition)
-    local targetObject = creature
-    if visible and not targetObject then targetObject = g_map.getTile(targetPosition) end
-
     if widgetAlive(self.minimapMarker) and not samePosition(self.minimapMarker.pos, targetPosition) then
         self.minimapMarker.pos = { x = targetPosition.x, y = targetPosition.y, z = targetPosition.z }
         local minimap = modules.game_minimap.getMiniMapUi()
         if minimap and not minimap:isDestroyed() then minimap:centerInPosition(self.minimapMarker, self.minimapMarker.pos) end
     end
 
-    if visible and targetObject then
-        local attachmentKey = creature and ('creature:' .. creature:getId()) or
-            string.format('tile:%d:%d:%d', targetPosition.x, targetPosition.y, targetPosition.z)
-        self:showAttached(targetObject, attachmentKey)
-    else
-        self:showEdge(playerPosition, targetPosition)
+    local nearby = self:showNearby(panel, targetPosition)
+    local mode = nearby and 'nearby' or
+        (self:showEdge(panel, playerPosition, targetPosition) and 'edge' or 'none')
+    local renderLog = string.format('%s:%s:%d:%d:%d:%s', self.target.target, mode,
+        targetPosition.x, targetPosition.y, targetPosition.z,
+        widgetAlive(self.minimapMarker) and 'marker' or 'no-marker')
+    if self.lastRenderLog ~= renderLog then
+        self.lastRenderLog = renderLog
+        log(string.format('render target=%s mode=%s position=%d,%d,%d minimap=%s', self.target.target, mode,
+            targetPosition.x, targetPosition.y, targetPosition.z,
+            widgetAlive(self.minimapMarker) and 'ready' or 'missing'))
     end
     self.refreshing = false
 end
 
 function xibatGuidanceController:onOpcode(_, _, payload)
+    log(string.format('opcode received terminated=%s type=%s version=%s action=%s', tostring(self.terminated),
+        type(payload), tostring(type(payload) == 'table' and payload.version or nil),
+        tostring(type(payload) == 'table' and payload.action or nil)))
     if self.terminated then return end
     local request = validatePayload(payload)
-    if not request then return end
+    if not request then
+        log('opcode rejected by strict validation')
+        return
+    end
 
     if request.action == 'clear' then
+        log('clear accepted')
         self:cleanup()
         return
     end
@@ -200,12 +240,20 @@ function xibatGuidanceController:onOpcode(_, _, payload)
         name = metadata.name,
         position = { x = request.position.x, y = request.position.y, z = request.position.z },
     }
+    log(string.format('show accepted target=%s position=%d,%d,%d online=%s', request.target,
+        request.position.x, request.position.y, request.position.z, tostring(g_game.isOnline())))
+    if not self.gameReady then
+        log('render deferred until game start')
+        return
+    end
     self:createMinimapMarker(self.target.position, self.target.label)
     self:refresh()
 end
 
 function xibatGuidanceController:onInit()
     self.terminated = false
+    self.gameReady = false
+    log(string.format('initializing opcode=%d online=%s', GUIDANCE_OPCODE, tostring(g_game.isOnline())))
     g_ui.importStyle('guidance.otui')
     self:registerExtendedJSONOpcode(GUIDANCE_OPCODE, function(...) self:onOpcode(...) end)
     local refresh = function() self:refresh() end
@@ -221,14 +269,22 @@ function xibatGuidanceController:onInit()
 end
 
 function xibatGuidanceController:onGameStart()
-    self:cleanup()
+    log(string.format('game start target=%s', self.target and self.target.target or 'none'))
+    self.gameReady = true
+    if self.target and not widgetAlive(self.minimapMarker) then
+        self:createMinimapMarker(self.target.position, self.target.label)
+    end
+    self:refresh()
 end
 
 function xibatGuidanceController:onGameEnd()
+    log(string.format('game end target=%s', self.target and self.target.target or 'none'))
+    self.gameReady = false
     self:cleanup()
 end
 
 function xibatGuidanceController:onTerminate()
+    log(string.format('terminating target=%s', self.target and self.target.target or 'none'))
     self.terminated = true
     self:cleanup()
 end
