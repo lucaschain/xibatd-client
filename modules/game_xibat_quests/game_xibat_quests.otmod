@@ -1,0 +1,9 @@
+Module
+  name: game_xibat_quests
+  description: Xiba authoritative quest sync and active objective tracker
+  author: Xiba
+  sandboxed: true
+  dependencies: [ game_interface, game_questlog, game_xibat_core, game_xibat_guidance ]
+  scripts: [ quests ]
+  @onLoad: xibatQuestController:init()
+  @onUnload: xibatQuestController:terminate()

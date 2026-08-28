@@ -66,6 +66,7 @@ Module
     - game_xibat_ascension
     - game_xibat_tutorial
     - game_xibat_guidance
+    - game_xibat_quests
 
   @onLoad: init()
   @onUnload: terminate()

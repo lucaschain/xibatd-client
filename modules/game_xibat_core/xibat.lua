@@ -6,5 +6,5 @@ XibatOpcode = {
     Forge = 206,
     RaidSelector = 207,
     Tutorial = 208,
-    Guidance = 209,
+    QuestJournal = 210,
 }

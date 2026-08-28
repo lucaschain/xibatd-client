@@ -1,59 +1,12 @@
-local GUIDANCE_OPCODE = modules.game_xibat_core.XibatOpcode.Guidance
-local PROTOCOL_VERSION = 1
 local EDGE_INSET = 12
 local TARGET_GAP = 8
 local SMOOTH_REFRESH_INTERVAL = 16
 local MINIMAP_ICON = '/images/game/minimap/flag18'
 
-local targetMetadata = {
-    sergio = { kind = 'npc', name = 'Sergio Rocket', label = 'Talk to Sergio Rocket' },
-    nicolai = { kind = 'npc', name = 'Nicolai F', label = 'Get a free turret rune from Nicolai F' },
-    raidSelector = { kind = 'tile', label = 'Use the Raid Selector' },
-    globe = { kind = 'tile', label = 'Use the Raid Globe to start the wave' },
-    araci = { kind = 'npc', name = 'Araci', label = 'Talk to Araci' },
-}
-
 xibatGuidanceController = Controller:new()
 
 local function log(message)
     g_logger.warning('[XibatGuidance] ' .. message)
-end
-
-local function hasExactFields(value, required)
-    if type(value) ~= 'table' then return false end
-    for field in pairs(value) do
-        if not required[field] then return false end
-    end
-    for field in pairs(required) do
-        if value[field] == nil then return false end
-    end
-    return true
-end
-
-local function isInteger(value, minimum, maximum)
-    return type(value) == 'number' and value == math.floor(value) and value >= minimum and value <= maximum
-end
-
-local function validatePosition(position)
-    return hasExactFields(position, { x = true, y = true, z = true }) and
-        isInteger(position.x, 0, 65535) and isInteger(position.y, 0, 65535) and
-        isInteger(position.z, 0, 15)
-end
-
-local function validatePayload(payload)
-    if type(payload) ~= 'table' or payload.version ~= PROTOCOL_VERSION then return nil end
-    if payload.action == 'clear' then
-        if not hasExactFields(payload, { version = true, action = true }) then return nil end
-        return { action = 'clear' }
-    end
-
-    if payload.action ~= 'show' or
-        not hasExactFields(payload, { version = true, action = true, body = true }) then return nil end
-    local body = payload.body
-    if not hasExactFields(body, { target = true, position = true }) or
-        not targetMetadata[body.target] or not validatePosition(body.position) then return nil end
-
-    return { action = 'show', target = body.target, position = body.position }
 end
 
 local function widgetAlive(widget)
@@ -104,11 +57,11 @@ end
 
 function xibatGuidanceController:resolveCreature()
     local target = self.target
-    if not target or target.kind ~= 'npc' then return nil end
+    if not target or target.kind ~= 'creature' then return nil end
 
     local panel = modules.game_interface.getMapPanel()
     for _, creature in ipairs(panel:getSpectators(false) or {}) do
-        if not creature:isRemoved() and creature:isNpc() and creature:getName() == target.name then return creature end
+        if not creature:isRemoved() and creature:isNpc() and creature:getName() == target.creatureName then return creature end
     end
     return nil
 end
@@ -191,7 +144,7 @@ function xibatGuidanceController:refresh()
     local player = g_game.getLocalPlayer()
     local panel = modules.game_interface.getMapPanel()
     if not player or not panel or panel:isDestroyed() then
-        log(string.format('render deferred target=%s player=%s panel=%s', self.target.target,
+        log(string.format('render deferred cue=%s player=%s panel=%s', self.target.id,
             player and 'ready' or 'missing', panel and not panel:isDestroyed() and 'ready' or 'missing'))
         self.refreshing = false
         return
@@ -209,46 +162,30 @@ function xibatGuidanceController:refresh()
     local nearby = self:showNearby(panel, targetPosition, creature)
     local mode = nearby and 'nearby' or
         (self:showEdge(panel, playerPosition, targetPosition) and 'edge' or 'none')
-    local renderLog = string.format('%s:%s:%d:%d:%d:%s', self.target.target, mode,
+    local renderLog = string.format('%s:%s:%d:%d:%d:%s', self.target.id, mode,
         targetPosition.x, targetPosition.y, targetPosition.z,
         widgetAlive(self.minimapMarker) and 'marker' or 'no-marker')
     if self.lastRenderLog ~= renderLog then
         self.lastRenderLog = renderLog
-        log(string.format('render target=%s mode=%s position=%d,%d,%d minimap=%s', self.target.target, mode,
+        log(string.format('render cue=%s mode=%s position=%d,%d,%d minimap=%s', self.target.id, mode,
             targetPosition.x, targetPosition.y, targetPosition.z,
             widgetAlive(self.minimapMarker) and 'ready' or 'missing'))
     end
     self.refreshing = false
 end
 
-function xibatGuidanceController:onOpcode(_, _, payload)
-    log(string.format('opcode received terminated=%s type=%s version=%s action=%s', tostring(self.terminated),
-        type(payload), tostring(type(payload) == 'table' and payload.version or nil),
-        tostring(type(payload) == 'table' and payload.action or nil)))
-    if self.terminated then return end
-    local request = validatePayload(payload)
-    if not request then
-        log('opcode rejected by strict validation')
-        return
-    end
-
-    if request.action == 'clear' then
-        log('clear accepted')
-        self:cleanup()
-        return
-    end
-
+function xibatGuidanceController:setQuestCue(cue)
+    if self.terminated or type(cue) ~= 'table' then return end
     self:cleanup()
-    local metadata = targetMetadata[request.target]
     self.target = {
-        target = request.target,
-        kind = metadata.kind,
-        label = metadata.label,
-        name = metadata.name,
-        position = { x = request.position.x, y = request.position.y, z = request.position.z },
+        id = cue.id,
+        kind = cue.kind,
+        label = cue.label,
+        creatureName = cue.creatureName,
+        position = { x = cue.position.x, y = cue.position.y, z = cue.position.z },
     }
-    log(string.format('show accepted target=%s position=%d,%d,%d online=%s', request.target,
-        request.position.x, request.position.y, request.position.z, tostring(g_game.isOnline())))
+    log(string.format('quest cue accepted id=%s position=%d,%d,%d online=%s', cue.id,
+        cue.position.x, cue.position.y, cue.position.z, tostring(g_game.isOnline())))
     if not self.gameReady then
         log('render deferred until game start')
         return
@@ -258,12 +195,15 @@ function xibatGuidanceController:onOpcode(_, _, payload)
     self:refresh()
 end
 
+function xibatGuidanceController:clearQuestCue()
+    self:cleanup()
+end
+
 function xibatGuidanceController:onInit()
     self.terminated = false
     self.gameReady = false
-    log(string.format('initializing opcode=%d online=%s', GUIDANCE_OPCODE, tostring(g_game.isOnline())))
+    log(string.format('initializing quest renderer online=%s', tostring(g_game.isOnline())))
     g_ui.importStyle('guidance.otui')
-    self:registerExtendedJSONOpcode(GUIDANCE_OPCODE, function(...) self:onOpcode(...) end)
     local refresh = function() self:refresh() end
     self:registerEvents(LocalPlayer, { onPositionChange = refresh })
     self:registerEvents(Creature, {
@@ -277,7 +217,7 @@ function xibatGuidanceController:onInit()
 end
 
 function xibatGuidanceController:onGameStart()
-    log(string.format('game start target=%s', self.target and self.target.target or 'none'))
+    log(string.format('game start cue=%s', self.target and self.target.id or 'none'))
     self.gameReady = true
     if self.target and not widgetAlive(self.minimapMarker) then
         self:createMinimapMarker(self.target.position, self.target.label)
@@ -287,13 +227,13 @@ function xibatGuidanceController:onGameStart()
 end
 
 function xibatGuidanceController:onGameEnd()
-    log(string.format('game end target=%s', self.target and self.target.target or 'none'))
+    log(string.format('game end cue=%s', self.target and self.target.id or 'none'))
     self.gameReady = false
     self:cleanup()
 end
 
 function xibatGuidanceController:onTerminate()
-    log(string.format('terminating target=%s', self.target and self.target.target or 'none'))
+    log(string.format('terminating cue=%s', self.target and self.target.id or 'none'))
     self.terminated = true
     self:cleanup()
 end

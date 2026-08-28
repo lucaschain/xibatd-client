@@ -1,0 +1,156 @@
+XibatQuestCard < Panel
+  height: 92
+  margin-bottom: 8
+  background-color: #121b20cc
+  border-width: 1
+  border-color: #354852
+  padding: 9
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: status.left
+    font: verdana-11px-rounded
+    color: #eadfbf
+
+  Label
+    id: status
+    anchors.top: parent.top
+    anchors.right: parent.right
+    text-align: right
+    color: #8fa6af
+
+  Label
+    id: objective
+    anchors.top: title.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 7
+    height: 30
+    text-wrap: true
+    color: #c8d1d3
+
+  ProgressBar
+    id: progress
+    anchors.left: parent.left
+    anchors.right: progressText.left
+    anchors.bottom: parent.bottom
+    margin-right: 8
+    height: 8
+    text: ""
+
+  Label
+    id: progressText
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    width: 72
+    text-align: right
+    color: #91a7b2
+
+XibatQuestTracker < UIWidget
+  id: xibatQuestTracker
+  size: 292 92
+  phantom: true
+  focusable: false
+  background-color: #10171de6
+  border-width: 1
+  border-color: #60727a
+  padding: 10
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: status.left
+    font: verdana-11px-rounded
+    color: #fff0b8
+
+  Label
+    id: status
+    anchors.top: parent.top
+    anchors.right: parent.right
+    text: ACTIVE
+    color: #7fc5a0
+
+  Label
+    id: objective
+    anchors.top: title.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 7
+    height: 32
+    text-wrap: true
+    color: #d2dcde
+
+  ProgressBar
+    id: progress
+    anchors.left: parent.left
+    anchors.right: progressText.left
+    anchors.bottom: parent.bottom
+    margin-right: 8
+    height: 7
+    text: ""
+
+  Label
+    id: progressText
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    width: 72
+    text-align: right
+    color: #a8bbc2
+
+MainWindow
+  id: xibatQuestJournal
+  size: 560 520
+  text: Quest Journal
+  image-source: /images/ui/window
+  @onEscape: xibatQuestController:close()
+
+  Label
+    id: heading
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin: 12 16 0 16
+    text: ADVENTURE LOG
+    font: verdana-11px-rounded
+    color: #d8c58f
+
+  Label
+    id: summary
+    anchors.top: heading.bottom
+    anchors.left: heading.left
+    anchors.right: heading.right
+    margin-top: 4
+    color: #91a7b2
+
+  ScrollablePanel
+    id: questList
+    anchors.top: summary.bottom
+    anchors.left: heading.left
+    anchors.right: questScroll.left
+    anchors.bottom: parent.bottom
+    margin-top: 12
+    margin-bottom: 16
+    margin-right: 4
+    vertical-scrollbar: questScroll
+    layout:
+      type: verticalBox
+      fit-children: false
+
+  VerticalScrollBar
+    id: questScroll
+    anchors.top: summary.bottom
+    anchors.bottom: parent.bottom
+    anchors.right: heading.right
+    margin-top: 12
+    margin-bottom: 16
+    step: 72
+
+  Label
+    id: emptyState
+    anchors.horizontalCenter: questList.horizontalCenter
+    anchors.verticalCenter: questList.verticalCenter
+    text: No quests are active yet.
+    color: #75878e

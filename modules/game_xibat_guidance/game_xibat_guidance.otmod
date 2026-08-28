@@ -1,6 +1,6 @@
 Module
   name: game_xibat_guidance
-  description: Xiba contextual target guidance
+  description: Xiba quest target guidance renderer
   author: Xiba
   sandboxed: true
   dependencies: [ game_interface, game_minimap, game_xibat_core ]

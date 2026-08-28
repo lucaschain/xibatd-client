@@ -37,6 +37,8 @@ local UITextEdit = {
 local settings = {}
 local namePlayer = ""
 local currentQuestId = nil  -- Track the currently selected quest ID
+local nativeQuestState = nil
+local renderNativeQuestLine = nil
 local missionToQuestMap = {} -- Map missionId to questId for navigation
 local isNavigating = false   -- Flag to prevent checkbox events during navigation
 local isUpdatingCheckbox = false  -- Flag to prevent recursive checkbox events
@@ -435,7 +437,11 @@ local function setupQuestItemClickHandler(item, isQuestList)
         self:setChecked(true)
         self:setBackgroundColor(COLORS.SELECTED)
         if isQuestList then
-            g_game.requestQuestLine(self:getId())
+            if self.nativeQuest then
+                renderNativeQuestLine(self.nativeQuest)
+            else
+                g_game.requestQuestLine(self:getId())
+            end
             self.iconShow:setVisible(true)
             self.iconPin:setVisible(true)
             questLogController.ui.panelQuestLineSelected:setText(self:getText())
@@ -545,7 +551,7 @@ function show()
     if not questLogController.ui then
         return
     end
-    g_game.requestQuestLog()
+    if not nativeQuestState then g_game.requestQuestLog() end
     questLogController.ui:show()
     questLogController.ui:raise()
     questLogController.ui:focus()
@@ -818,6 +824,7 @@ end
 =                      onParse                      =
 =================================================== ]] --
 local function onQuestLog(questList)
+    if nativeQuestState then return end
     UITextList.questLogList:destroyChildren()
 
     questLogCache = {
@@ -843,6 +850,7 @@ local function onQuestLog(questList)
 end
 
 local function onQuestLine(questId, questMissions)
+    if nativeQuestState then return end
     currentQuestId = questId  -- Store the current quest ID
     UITextList.questLogLine:destroyChildren()
     
@@ -871,6 +879,71 @@ local function onQuestLine(questId, questMissions)
             scheduleEvent(function()
                 isNavigating = false
             end, 100)
+        end
+    end
+end
+
+renderNativeQuestLine = function(quest)
+    currentQuestId = quest.nativeId
+    UITextList.questLogLine:destroyChildren()
+    isUpdatingCheckbox = true
+    UICheckBox.showInQuestTracker:setChecked(false)
+    isUpdatingCheckbox = false
+
+    local categoryColor = COLORS.BASE_1
+    for index, stage in ipairs(quest.stages) do
+        local item = createQuestItem(UITextList.questLogLine, index, stage.objective, categoryColor)
+        local status = stage.completed and "Completed" or
+            string.format("Progress: %d / %d", stage.progress.current, stage.progress.total)
+        item.description = string.format("%s\n\n%s", stage.objective, status)
+        setupQuestItemClickHandler(item, false)
+        categoryColor = categoryColor == COLORS.BASE_1 and COLORS.BASE_2 or COLORS.BASE_1
+    end
+
+    if UITextList.questLogLine:hasChildren() then
+        local selected = 1
+        for index, stage in ipairs(quest.stages) do
+            if stage.id == quest.currentStageId then
+                selected = index
+                break
+            end
+        end
+        local child = UITextList.questLogLine:getChildByIndex(selected)
+        if child then child:onClick() end
+    end
+end
+
+function questLogController:setNativeQuestSnapshot(state)
+    nativeQuestState = state
+    UITextList.questLogList:destroyChildren()
+    UITextList.questLogLine:destroyChildren()
+    UITextList.questLogInfo:setText("")
+    questLogController.ui.panelQuestLineSelected:setText("")
+    questLogCache = { items = {}, completed = 0, hidden = 0, visible = 0 }
+    if not state then
+        updateQuestCounter()
+        return
+    end
+
+    local categoryColor = COLORS.BASE_1
+    for index, quest in ipairs(state.quests) do
+        quest.nativeId = index
+        local icon = quest.completed and "/game_cyclopedia/images/checkmark-icon" or ""
+        local item = createQuestItem(UITextList.questLogList, index, quest.title, categoryColor, icon)
+        item.nativeQuest = quest
+        setupQuestItemClickHandler(item, true)
+        categoryColor = categoryColor == COLORS.BASE_1 and COLORS.BASE_2 or COLORS.BASE_1
+    end
+    questLogCache.visible = #state.quests
+    sortQuestList(UITextList.questLogList, questLogController.currentSortOrder or "Alphabetically (A-Z)")
+    filterQuestList(UITextEdit.search:getText())
+    updateQuestCounter()
+
+    if state.active then
+        local activeQuest = state.questsById[state.active.questId]
+        if activeQuest then
+            questLogController.ui.panelQuestLineSelected:setText(activeQuest.title)
+            renderNativeQuestLine(activeQuest)
         end
     end
 end
@@ -1345,4 +1418,5 @@ function questLogController:onGameEnd()
     missionToQuestMap = {}
     questTrackerSettingsLoaded = false
     namePlayer = ""
+    nativeQuestState = nil
 end
