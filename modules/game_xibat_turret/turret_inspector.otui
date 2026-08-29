@@ -1,19 +1,43 @@
-XibatTurretStatName < Label
-  color: #8f9da5
+XibatTurretUpgradeBadge < Label
+  size: 13 13
+  text: +
+  text-align: center
+  font: verdana-11px-rounded
+  color: #2a1b08
+  background-color: #f2bd55ee
+  border-width: 1
+  border-color: #fff0a8
+  margin-left: 19
+  margin-top: -3
+  phantom: true
+  focusable: false
+  draggable: false
+
+XibatTurretGridCell < Panel
+  height: 29
+  background-color: #11191ed8
+  border-width: 1
+  border-color: #30434c
+
+XibatTurretGridLabel < Label
+  anchors.left: parent.left
+  anchors.right: parent.right
+  anchors.verticalCenter: parent.verticalCenter
+  margin-left: 8
+  margin-right: 5
+  color: #91a0a7
   text-auto-resize: true
 
-XibatTurretStatValue < Label
+XibatTurretGridCurrent < XibatTurretGridLabel
   color: #e2e8eb
-  text-auto-resize: true
 
-XibatTurretNextValue < Label
+XibatTurretGridNext < XibatTurretGridLabel
   color: #79c99e
-  text-auto-resize: true
 
 MainWindow
   id: xibatTurretInspector
   !text: tr('Turret Command')
-  size: 440 310
+  size: 398 286
   @onEscape: turretInspectorController:close()
 
   Label
@@ -34,129 +58,158 @@ MainWindow
     text-auto-resize: true
     text: LEVEL 3
 
-  HorizontalSeparator
-    id: headerSeparator
+  Panel
+    id: grid
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.top: name.bottom
-    margin-top: 10
+    margin-top: 11
+    height: 145
 
-  Label
-    id: currentTitle
-    anchors.left: parent.left
-    anchors.top: headerSeparator.bottom
-    margin-left: 112
-    margin-top: 12
-    !text: tr('CURRENT')
-    color: #71828c
-    font: verdana-11px-rounded
-    text-auto-resize: true
+    XibatTurretGridCell
+      id: statHeader
+      width: 91
+      anchors.left: parent.left
+      anchors.top: parent.top
+      XibatTurretGridLabel
+        !text: tr('STAT')
+        font: verdana-11px-rounded
 
-  Label
-    id: nextTitle
-    anchors.left: parent.left
-    anchors.top: currentTitle.top
-    margin-left: 245
-    !text: tr('NEXT LEVEL')
-    color: #71828c
-    font: verdana-11px-rounded
-    text-auto-resize: true
+    XibatTurretGridCell
+      id: currentHeader
+      width: 111
+      anchors.left: statHeader.right
+      anchors.top: parent.top
+      XibatTurretGridLabel
+        !text: tr('CURRENT')
+        font: verdana-11px-rounded
 
-  XibatTurretStatName
-    id: levelLabel
-    anchors.left: parent.left
-    anchors.top: currentTitle.bottom
-    margin-top: 16
-    !text: tr('Level')
+    XibatTurretGridCell
+      id: nextHeader
+      anchors.left: currentHeader.right
+      anchors.right: parent.right
+      anchors.top: parent.top
+      XibatTurretGridLabel
+        !text: tr('NEXT LEVEL')
+        font: verdana-11px-rounded
 
-  XibatTurretStatName
-    id: damageLabel
-    anchors.left: parent.left
-    anchors.top: levelLabel.bottom
-    margin-top: 15
-    !text: tr('Damage')
+    XibatTurretGridCell
+      id: levelNameCell
+      width: 91
+      anchors.left: parent.left
+      anchors.top: statHeader.bottom
+      XibatTurretGridLabel
+        !text: tr('Level')
+    XibatTurretGridCell
+      id: levelCurrentCell
+      width: 111
+      anchors.left: levelNameCell.right
+      anchors.top: currentHeader.bottom
+      XibatTurretGridCurrent
+        id: levelCurrent
+        text: 3
+    XibatTurretGridCell
+      id: levelNextCell
+      anchors.left: levelCurrentCell.right
+      anchors.right: parent.right
+      anchors.top: nextHeader.bottom
+      XibatTurretGridNext
+        id: levelNext
+        text: 4 (+1)
 
-  XibatTurretStatName
-    id: speedLabel
-    anchors.left: parent.left
-    anchors.top: damageLabel.bottom
-    margin-top: 15
-    !text: tr('Attack rate')
+    XibatTurretGridCell
+      id: damageNameCell
+      width: 91
+      anchors.left: parent.left
+      anchors.top: levelNameCell.bottom
+      XibatTurretGridLabel
+        !text: tr('Damage')
+    XibatTurretGridCell
+      id: damageCurrentCell
+      width: 111
+      anchors.left: damageNameCell.right
+      anchors.top: levelCurrentCell.bottom
+      XibatTurretGridCurrent
+        id: damageCurrent
+        text: 180 - 180
+    XibatTurretGridCell
+      id: damageNextCell
+      anchors.left: damageCurrentCell.right
+      anchors.right: parent.right
+      anchors.top: levelNextCell.bottom
+      XibatTurretGridNext
+        id: damageNext
+        text: 320 - 320 (+140 / +140)
 
-  XibatTurretStatName
-    id: rangeLabel
-    anchors.left: parent.left
-    anchors.top: speedLabel.bottom
-    margin-top: 15
-    !text: tr('Range')
+    XibatTurretGridCell
+      id: speedNameCell
+      width: 91
+      anchors.left: parent.left
+      anchors.top: damageNameCell.bottom
+      XibatTurretGridLabel
+        !text: tr('Attack rate')
+    XibatTurretGridCell
+      id: speedCurrentCell
+      width: 111
+      anchors.left: speedNameCell.right
+      anchors.top: damageCurrentCell.bottom
+      XibatTurretGridCurrent
+        id: speedCurrent
+        text: 0.59/s
+    XibatTurretGridCell
+      id: speedNextCell
+      anchors.left: speedCurrentCell.right
+      anchors.right: parent.right
+      anchors.top: damageNextCell.bottom
+      XibatTurretGridNext
+        id: speedNext
+        text: 0.67/s (+0.08)
 
-  XibatTurretStatValue
-    id: levelCurrent
-    anchors.left: currentTitle.left
-    anchors.top: levelLabel.top
-    text: 3
-
-  XibatTurretStatValue
-    id: damageCurrent
-    anchors.left: currentTitle.left
-    anchors.top: damageLabel.top
-    text: 180 - 180
-
-  XibatTurretStatValue
-    id: speedCurrent
-    anchors.left: currentTitle.left
-    anchors.top: speedLabel.top
-    text: 0.59/s
-
-  XibatTurretStatValue
-    id: rangeCurrent
-    anchors.left: currentTitle.left
-    anchors.top: rangeLabel.top
-    text: 4
-
-  XibatTurretNextValue
-    id: levelNext
-    anchors.left: nextTitle.left
-    anchors.top: levelLabel.top
-    text: 4 (+1)
-
-  XibatTurretNextValue
-    id: damageNext
-    anchors.left: nextTitle.left
-    anchors.top: damageLabel.top
-    text: 320 - 320 (+140 / +140)
-
-  XibatTurretNextValue
-    id: speedNext
-    anchors.left: nextTitle.left
-    anchors.top: speedLabel.top
-    text: 0.67/s (+0.08)
-
-  XibatTurretNextValue
-    id: rangeNext
-    anchors.left: nextTitle.left
-    anchors.top: rangeLabel.top
-    text: 4 (+0)
-
-  HorizontalSeparator
-    id: actionSeparator
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.top: rangeLabel.bottom
-    margin-top: 15
+    XibatTurretGridCell
+      id: rangeNameCell
+      width: 91
+      anchors.left: parent.left
+      anchors.top: speedNameCell.bottom
+      XibatTurretGridLabel
+        !text: tr('Range')
+    XibatTurretGridCell
+      id: rangeCurrentCell
+      width: 111
+      anchors.left: rangeNameCell.right
+      anchors.top: speedCurrentCell.bottom
+      XibatTurretGridCurrent
+        id: rangeCurrent
+        text: 4
+    XibatTurretGridCell
+      id: rangeNextCell
+      anchors.left: rangeCurrentCell.right
+      anchors.right: parent.right
+      anchors.top: speedNextCell.bottom
+      XibatTurretGridNext
+        id: rangeNext
+        text: 4 (+0)
 
   Label
     id: soulBalance
     anchors.left: parent.left
-    anchors.top: actionSeparator.bottom
+    anchors.top: grid.bottom
     margin-top: 10
-    color: #b8c3c9
+    color: #c2ccd0
     text-auto-resize: true
     text: Available soul: 620
 
+  Label
+    id: statusMessage
+    anchors.right: parent.right
+    anchors.top: grid.bottom
+    margin-top: 10
+    color: #d6a96d
+    text-auto-resize: true
+    text: Ready
+
   Button
     id: closeButton
-    size: 82 26
+    size: 76 26
     anchors.left: parent.left
     anchors.bottom: parent.bottom
     !text: tr('Close')
@@ -164,14 +217,14 @@ MainWindow
 
   Button
     id: upgradeButton
-    size: 142 26
+    size: 136 26
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     !text: tr('Upgrade (-380)')
 
   Button
     id: sellButton
-    size: 108 26
+    size: 104 26
     anchors.right: upgradeButton.left
     anchors.bottom: parent.bottom
     margin-right: 6
