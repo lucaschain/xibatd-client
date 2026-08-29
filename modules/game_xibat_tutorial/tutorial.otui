@@ -2,7 +2,17 @@ XibatTutorialTopicButton < Button
   height: 32
   margin-right: 6
   text-align: center
+  text-offset: 0 0
   font: verdana-11px-rounded
+
+  $pressed:
+    text-offset: 0 0
+
+  $on:
+    text-offset: 0 0
+
+  $checked:
+    text-offset: 0 0
 
 MainWindow
   id: tutorialWindow
@@ -22,7 +32,22 @@ MainWindow
     height: 32
     layout:
       type: horizontalBox
-      fit-children: false
+      fit-children: true
+
+    XibatTutorialTopicButton
+      id: previewTutorialRaids
+      width: 120
+      text: Raid Operations
+
+    XibatTutorialTopicButton
+      id: previewTutorialForge
+      width: 96
+      text: Rune Forge
+
+    XibatTutorialTopicButton
+      id: previewTutorialAscension
+      width: 96
+      text: Ascension
 
   Label
     id: topicTitle
@@ -34,6 +59,7 @@ MainWindow
     margin-right: 18
     font: verdana-11px-rounded
     color: #e9dec1
+    text: Raid Operations
 
   Label
     id: stepCounter
@@ -42,6 +68,7 @@ MainWindow
     anchors.right: topicTitle.right
     margin-top: 2
     color: #91a7b2
+    text: LESSON 1 OF 4
 
   UIWidget
     id: screenshot
@@ -55,6 +82,7 @@ MainWindow
     background-color: #10181d
     border-width: 1
     border-color: #40515a
+    image-source: /game_xibat_tutorial/images/raids/1
 
   Label
     id: description
@@ -67,6 +95,7 @@ MainWindow
     text-wrap: true
     font: verdana-11px-rounded
     color: #d5c9a9
+    text: Click the globe to start the raid.
 
   ProgressBar
     id: progress
@@ -76,6 +105,7 @@ MainWindow
     margin-bottom: 52
     height: 8
     text: ""
+    value: 25
 
   Button
     id: previous

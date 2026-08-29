@@ -23,6 +23,7 @@ MainWindow
     font: verdana-11px-rounded
     color: #eef3f5
     text-auto-resize: true
+    text: Fire Turret
 
   Label
     id: levelBadge
@@ -31,6 +32,7 @@ MainWindow
     color: #f4d08a
     font: verdana-11px-rounded
     text-auto-resize: true
+    text: LEVEL 3
 
   HorizontalSeparator
     id: headerSeparator
@@ -92,41 +94,49 @@ MainWindow
     id: levelCurrent
     anchors.left: currentTitle.left
     anchors.top: levelLabel.top
+    text: 3
 
   XibatTurretStatValue
     id: damageCurrent
     anchors.left: currentTitle.left
     anchors.top: damageLabel.top
+    text: 180 - 180
 
   XibatTurretStatValue
     id: speedCurrent
     anchors.left: currentTitle.left
     anchors.top: speedLabel.top
+    text: 0.59/s
 
   XibatTurretStatValue
     id: rangeCurrent
     anchors.left: currentTitle.left
     anchors.top: rangeLabel.top
+    text: 4
 
   XibatTurretNextValue
     id: levelNext
     anchors.left: nextTitle.left
     anchors.top: levelLabel.top
+    text: 4 (+1)
 
   XibatTurretNextValue
     id: damageNext
     anchors.left: nextTitle.left
     anchors.top: damageLabel.top
+    text: 320 - 320 (+140 / +140)
 
   XibatTurretNextValue
     id: speedNext
     anchors.left: nextTitle.left
     anchors.top: speedLabel.top
+    text: 0.67/s (+0.08)
 
   XibatTurretNextValue
     id: rangeNext
     anchors.left: nextTitle.left
     anchors.top: rangeLabel.top
+    text: 4 (+0)
 
   HorizontalSeparator
     id: actionSeparator
@@ -142,6 +152,7 @@ MainWindow
     margin-top: 10
     color: #b8c3c9
     text-auto-resize: true
+    text: Available soul: 620
 
   Button
     id: closeButton
@@ -156,7 +167,7 @@ MainWindow
     size: 142 26
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    !text: tr('Upgrade')
+    !text: tr('Upgrade (-380)')
 
   Button
     id: sellButton
@@ -164,4 +175,4 @@ MainWindow
     anchors.right: upgradeButton.left
     anchors.bottom: parent.bottom
     margin-right: 6
-    !text: tr('Sell')
+    !text: tr('Sell (+20)')

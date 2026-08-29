@@ -28,6 +28,7 @@ local function makeWidget()
     function widget:setItemId(itemId) self.itemId = itemId end
     function widget:setItemCount(count) self.itemCount = count end
     function widget:setTooltip(tooltip) self.tooltip = tooltip end
+    function widget:setId(id) self.id = id if self.parent then self.parent[id] = self end end
     return widget
 end
 
@@ -72,6 +73,7 @@ end
 
 function environment.g_ui.createWidget(style, parent)
     local widget = makeWidget()
+    widget.parent = parent
     if style == 'XibatForgeBranchCard' then
         for _, id in ipairs({ 'preview', 'name', 'level', 'progress', 'status', 'description', 'costs', 'upgradeButton' }) do
             widget[id] = makeWidget()

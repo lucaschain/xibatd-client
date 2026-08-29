@@ -135,6 +135,7 @@ function xibatTutorialController:onInit()
     self.topicId = topics[1].id
     self.step = 1
     self.topicButtons = {}
+    self.ui.topicRail:destroyChildren()
     self.ui:hide()
     for _, topic in ipairs(topics) do
         local button = g_ui.createWidget('XibatTutorialTopicButton', self.ui.topicRail)

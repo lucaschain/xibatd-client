@@ -1,6 +1,7 @@
 local TIMER_OPCODE = modules.game_xibat_core.XibatOpcode.RaidTimer
 local TICK_INTERVAL = 1000
 local MAX_TITLE_LENGTH = 64
+local TIMER_SETTINGS = 'xibatRaidTimer'
 
 raidTimerController = Controller:new()
 raidTimerController:setUI('raid_timer')
@@ -19,6 +20,25 @@ function raidTimerController:clearTimer()
     if self.ui then
         self.ui:hide()
     end
+end
+
+function raidTimerController:dismissTimer()
+    if self.ui then self.ui:hide() end
+end
+
+function raidTimerController:onTimerMoved(widget)
+    if not widget then return end
+    local position = widget:getPosition()
+    g_settings.setNode(TIMER_SETTINGS, { position = { x = position.x, y = position.y } })
+end
+
+function raidTimerController:restorePosition()
+    local settings = g_settings.getNode(TIMER_SETTINGS) or {}
+    local position = settings.position
+    if type(position) ~= 'table' or type(position.x) ~= 'number' or type(position.y) ~= 'number' then return end
+    self.ui:breakAnchors()
+    self.ui:setPosition(position)
+    self.ui:bindRectToParent()
 end
 
 function raidTimerController:updateTimer()
@@ -71,6 +91,9 @@ function raidTimerController:onTimerOpcode(_, _, payload)
 end
 
 function raidTimerController:onInit()
+    self:restorePosition()
+    self.ui.closeButton.onClick = function() self:dismissTimer() return true end
+    self.ui.onDragLeave = function(widget) self:onTimerMoved(widget) end
     self.ui:hide()
     self:registerExtendedJSONOpcode(TIMER_OPCODE, function(...)
         self:onTimerOpcode(...)

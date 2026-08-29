@@ -270,6 +270,8 @@ end
 
 function xibatForgeController:renderBranch(branch)
     local card = g_ui.createWidget('XibatForgeBranchCard', self.ui.branches)
+    local costs = g_ui.createWidget('XibatForgeCosts', card)
+    costs:setId('costs')
     local isMaximum = branch.level == branch.maxLevel
     local isActive = branch.level > 0
     card.branchId = branch.branchId
@@ -285,7 +287,7 @@ function xibatForgeController:renderBranch(branch)
         card.description:setText(branch.nextUpgrade.description)
         card.description:setTooltip(branch.nextUpgrade.description)
         for _, cost in ipairs(branch.nextUpgrade.cost) do
-            local item = g_ui.createWidget('XibatForgeCost', card.costs)
+            local item = g_ui.createWidget('XibatForgeCost', costs)
             item:setItemId(cost.clientId)
             item:setItemCount(cost.amount)
             item:setTooltip(tr('%s: %d required', cost.name, cost.amount))
@@ -387,6 +389,7 @@ end
 function xibatForgeController:onInit()
     self.branchWidgets = {}
     self.nextRequestId = 0
+    self:clearBranches()
     self.ui:hide()
     self:registerExtendedJSONOpcode(FORGE_OPCODE, function(...)
         self:onForgeOpcode(...)

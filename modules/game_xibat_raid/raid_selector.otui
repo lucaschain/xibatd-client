@@ -13,6 +13,7 @@ XibatRaidCard < Button
     color: #e8edf0
     text-auto-resize: true
     phantom: true
+    text: Forest
 
   Label
     id: mode
@@ -24,6 +25,7 @@ XibatRaidCard < Button
     color: #84b9c8
     text-auto-resize: true
     phantom: true
+    text: SURVIVAL
 
   Label
     id: status
@@ -34,6 +36,7 @@ XibatRaidCard < Button
     color: #9da9b0
     text-auto-resize: true
     phantom: true
+    text: 6/10 waves
 
   ProgressBar
     id: progress
@@ -46,6 +49,7 @@ XibatRaidCard < Button
     margin-bottom: 8
     background-color: #617782
     phantom: true
+    value: 60
 
 XibatRaidReward < Item
   size: 36 36
@@ -76,6 +80,7 @@ MainWindow
     color: #f4d08a
     font: verdana-11px-rounded
     text-auto-resize: true
+    text: 2 / 3
 
   Label
     id: resetTitle
@@ -121,6 +126,9 @@ MainWindow
         type: verticalBox
         fit-children: false
 
+      XibatRaidCard
+        id: previewRaidCard
+
     VerticalScrollBar
       id: listScroll
       anchors.top: parent.top
@@ -143,6 +151,7 @@ MainWindow
     anchors.top: listPanel.top
     anchors.bottom: listPanel.bottom
     margin-left: 18
+    visible: false
 
     Label
       anchors.centerIn: parent
@@ -159,7 +168,7 @@ MainWindow
     anchors.top: listPanel.top
     anchors.bottom: listPanel.bottom
     margin-left: 18
-    visible: false
+    visible: true
 
     Label
       id: name
@@ -168,6 +177,7 @@ MainWindow
       font: verdana-11px-rounded
       color: #eef3f5
       text-auto-resize: true
+      text: Forest
 
     Label
       id: tier
@@ -175,6 +185,7 @@ MainWindow
       anchors.top: parent.top
       color: #f4d08a
       text-auto-resize: true
+      text: BRONZE
 
     Label
       id: mode
@@ -183,6 +194,7 @@ MainWindow
       margin-top: 8
       color: #84b9c8
       text-auto-resize: true
+      text: SURVIVAL
 
     Label
       id: waves
@@ -191,6 +203,7 @@ MainWindow
       margin-top: 8
       color: #b5c0c6
       text-auto-resize: true
+      text: 6 / 10 waves
 
     ProgressBar
       id: progress
@@ -200,6 +213,7 @@ MainWindow
       anchors.top: mode.bottom
       margin-top: 10
       background-color: #617782
+      value: 60
 
     UIWidget
       id: screenshot
@@ -212,6 +226,7 @@ MainWindow
       background-color: #10181d
       border-width: 1
       border-color: #3d5363
+      image-source: /game_xibat_raid/images/raids/Forest
 
     Label
       id: description
@@ -223,6 +238,7 @@ MainWindow
       text-wrap: true
       text-align: top-left
       color: #c4ccd1
+      text: Survival raid in the forest. Hold every lane and protect the crystal.
 
     Label
       id: rewardsTitle
@@ -245,6 +261,10 @@ MainWindow
         cell-size: 40 40
         num-columns: 10
         flow: true
+
+      XibatRaidReward
+        id: previewRaidReward
+        item-id: 11445
 
     Button
       id: startButton

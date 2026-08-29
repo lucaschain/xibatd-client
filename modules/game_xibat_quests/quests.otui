@@ -8,6 +8,7 @@ XibatQuestCard < Panel
 
   Label
     id: title
+    text: First Watch
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: status.left
@@ -16,6 +17,7 @@ XibatQuestCard < Panel
 
   Label
     id: status
+    text: IN PROGRESS
     anchors.top: parent.top
     anchors.right: parent.right
     text-align: right
@@ -23,6 +25,7 @@ XibatQuestCard < Panel
 
   Label
     id: objective
+    text: Collect your first turret rune from Nicolai.
     anchors.top: title.bottom
     anchors.left: parent.left
     anchors.right: parent.right
@@ -39,20 +42,23 @@ XibatQuestCard < Panel
     margin-right: 8
     height: 8
     text: ""
+    value: 33
 
   Label
     id: progressText
+    text: 1 / 3
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     width: 72
     text-align: right
     color: #91a7b2
 
-XibatQuestTracker < UIWidget
+XibatQuestTracker < UIWindow
   id: xibatQuestTracker
   size: 292 92
-  phantom: true
+  phantom: false
   focusable: false
+  draggable: true
   background-color: #10171de6
   border-width: 1
   border-color: #60727a
@@ -60,21 +66,26 @@ XibatQuestTracker < UIWidget
 
   Label
     id: title
+    text: First Watch
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: status.left
     font: verdana-11px-rounded
     color: #fff0b8
+    phantom: true
 
   Label
     id: status
     anchors.top: parent.top
-    anchors.right: parent.right
+    anchors.right: closeButton.left
+    margin-right: 7
     text: ACTIVE
     color: #7fc5a0
+    phantom: true
 
   Label
     id: objective
+    text: Collect your first turret rune from Nicolai.
     anchors.top: title.bottom
     anchors.left: parent.left
     anchors.right: parent.right
@@ -82,6 +93,7 @@ XibatQuestTracker < UIWidget
     height: 32
     text-wrap: true
     color: #d2dcde
+    phantom: true
 
   ProgressBar
     id: progress
@@ -91,6 +103,8 @@ XibatQuestTracker < UIWidget
     margin-right: 8
     height: 7
     text: ""
+    value: 33
+    phantom: true
 
   Label
     id: progressText
@@ -99,6 +113,23 @@ XibatQuestTracker < UIWidget
     width: 72
     text-align: right
     color: #a8bbc2
+    text: 1 / 3
+    phantom: true
+
+  UIButton
+    id: closeButton
+    anchors.top: parent.top
+    anchors.right: parent.right
+    size: 12 12
+    image-size: 14 14
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 28 0 14 14
+
+    $hover:
+      image-clip: 28 14 14 14
+
+    $pressed:
+      image-clip: 28 28 14 14
 
 MainWindow
   id: xibatQuestJournal
@@ -124,6 +155,7 @@ MainWindow
     anchors.right: heading.right
     margin-top: 4
     color: #91a7b2
+    text: 2 quests  |  1 completed
 
   ScrollablePanel
     id: questList
@@ -138,6 +170,9 @@ MainWindow
     layout:
       type: verticalBox
       fit-children: false
+
+    XibatQuestCard
+      id: previewQuest
 
   VerticalScrollBar
     id: questScroll
@@ -154,3 +189,9 @@ MainWindow
     anchors.verticalCenter: questList.verticalCenter
     text: No quests are active yet.
     color: #75878e
+    visible: false
+
+  XibatQuestTracker
+    id: previewTracker
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.verticalCenter: parent.verticalCenter

@@ -84,6 +84,11 @@ function create()
         return
     end
     gameShopWindow = g_ui.displayUI("game_shop")
+    gameShopWindow:getChildById("categoriesList"):destroyChildren()
+    gameShopWindow:getChildById("offers"):getChildById("offersList"):destroyChildren()
+    gameShopWindow:getChildById("offers"):getChildById("offerDetails"):
+        getChildById("description"):destroyChildren()
+    gameShopWindow:getChildById("history"):getChildById("list"):destroyChildren()
     gameShopWindow:hide()
 
     local protocolGame = g_game.getProtocolGame()

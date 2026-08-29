@@ -256,6 +256,8 @@ function raidSelectorController:onInit()
     if not self.raidList then
         error('Raid selector list widget was not found.')
     end
+    self.raidList:destroyChildren()
+    self.ui.detail.rewards:destroyChildren()
     self:registerExtendedJSONOpcode(RAID_OPCODE, function(...)
         self:onRaidOpcode(...)
     end)

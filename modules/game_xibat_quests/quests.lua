@@ -12,6 +12,7 @@ local MAX_OBJECTIVE_BYTES = 320
 local MAX_CUE_LABEL_BYTES = 160
 local MAX_CREATURE_NAME_BYTES = 64
 local MAX_PROGRESS = 1000000000
+local PRESENTATION_SETTINGS = 'xibatQuestPresentation'
 
 -- Opcode 210 v1 accepts exact-field JSON snapshots and deltas. Deltas replace whole quests and
 -- must advance the committed revision by one. `active` and each stage `cue` are either false or
@@ -24,6 +25,20 @@ xibatQuestController:setUI('quests')
 
 local function log(message)
     g_logger.warning('[XibatQuests] ' .. message)
+end
+
+local function characterKey()
+    local name = g_game.getCharacterName and g_game.getCharacterName() or ''
+    return string.lower(name or '')
+end
+
+local function presentationSettings()
+    local settings = g_settings.getNode(PRESENTATION_SETTINGS) or {}
+    settings.characters = settings.characters or {}
+    local key = characterKey()
+    settings.characters[key] = settings.characters[key] or { tracked = {} }
+    settings.characters[key].tracked = settings.characters[key].tracked or {}
+    return settings, settings.characters[key]
 end
 
 local function hasExactFields(value, required)
@@ -232,13 +247,47 @@ end
 function xibatQuestController:destroyTracker()
     local tracker = self.tracker
     self.tracker = nil
+    self.trackerKey = nil
     if tracker and not tracker:isDestroyed() then tracker:destroy() end
 end
 
-function xibatQuestController:clearCards()
-    for _, card in ipairs(self.cards or {}) do
-        if not card:isDestroyed() then card:destroy() end
+function xibatQuestController:isQuestTracked(questId)
+    local _, character = presentationSettings()
+    local tracked = character.tracked[questId]
+    if tracked ~= nil then return tracked == true end
+    return self.active ~= false and self.active.questId == questId
+end
+
+function xibatQuestController:setQuestTracked(questId, tracked)
+    if type(questId) ~= 'string' or not self.questsById[questId] then return end
+    local settings, character = presentationSettings()
+    character.tracked[questId] = tracked == true
+    g_settings.setNode(PRESENTATION_SETTINGS, settings)
+    if tracked and self.active ~= false and self.active.questId == questId then
+        self.dismissedTrackerKey = nil
     end
+    self:renderTracker()
+    self:updateGuidance()
+end
+
+function xibatQuestController:onTrackerMoved(widget)
+    local panel = modules.game_interface.getMapPanel()
+    if not widget or not panel or panel:isDestroyed() then return end
+    local position = widget:getPosition()
+    local rect = panel:getRect()
+    local settings, character = presentationSettings()
+    character.trackerPosition = { x = position.x - rect.x, y = position.y - rect.y }
+    g_settings.setNode(PRESENTATION_SETTINGS, settings)
+end
+
+function xibatQuestController:dismissTracker()
+    if self.active == false then return end
+    self.dismissedTrackerKey = self.active.questId .. ':' .. self.active.stageId
+    self:destroyTracker()
+end
+
+function xibatQuestController:clearCards()
+    if self.ui and self.ui.questList then self.ui.questList:destroyChildren() end
     self.cards = {}
 end
 
@@ -274,10 +323,14 @@ function xibatQuestController:renderTracker()
     if not self.gameReady then return end
     local quest, stage = self:activeQuestAndStage()
     if not quest or not stage then return end
+    local trackerKey = self.active.questId .. ':' .. self.active.stageId
+    if not self:isQuestTracked(quest.id) or self.dismissedTrackerKey == trackerKey then return end
     local panel = modules.game_interface.getMapPanel()
     if not panel or panel:isDestroyed() then return end
     local tracker = g_ui.createWidget('XibatQuestTracker', panel)
     if not tracker then return end
+    tracker.closeButton.onClick = function() self:dismissTracker() return true end
+    tracker.onDragLeave = function(widget) self:onTrackerMoved(widget) end
     tracker.title:setText(quest.title)
     tracker.objective:setText(stage.objective)
     tracker.status:setText(quest.completed and 'COMPLETED' or 'ACTIVE')
@@ -287,13 +340,21 @@ function xibatQuestController:renderTracker()
     local rect = panel:getRect()
     local width = math.max(220, math.min(292, rect.width - 24))
     tracker:setWidth(width)
-    tracker:setPosition({ x = rect.x + rect.width - width - 12, y = rect.y + 12 })
+    local _, character = presentationSettings()
+    local position = character.trackerPosition
+    if position and type(position.x) == 'number' and type(position.y) == 'number' then
+        tracker:setPosition({ x = rect.x + position.x, y = rect.y + position.y })
+        tracker:bindRectToParent()
+    else
+        tracker:setPosition({ x = rect.x + rect.width - width - 12, y = rect.y + 12 })
+    end
+    self.trackerKey = trackerKey
     self.tracker = tracker
 end
 
 function xibatQuestController:updateGuidance()
     local quest, stage = self:activeQuestAndStage()
-    if quest and not quest.completed and stage and stage.cue ~= false then
+    if quest and self:isQuestTracked(quest.id) and not quest.completed and stage and stage.cue ~= false then
         local cue = stage.cue
         modules.game_xibat_guidance.xibatGuidanceController:setQuestCue({
             id = self.active.questId .. ':' .. self.active.stageId,
@@ -364,6 +425,8 @@ function xibatQuestController:reset()
     self.quests = {}
     self.questsById = {}
     self.active = false
+    self.dismissedTrackerKey = nil
+    self.trackerKey = nil
     local questLog = modules.game_questlog and modules.game_questlog.questLogController
     if questLog and questLog.setNativeQuestSnapshot then questLog:setNativeQuestSnapshot(nil) end
     self:renderJournal()
@@ -378,6 +441,9 @@ function xibatQuestController:onInit()
     self.quests = {}
     self.questsById = {}
     self.active = false
+    self.dismissedTrackerKey = nil
+    self.trackerKey = nil
+    if self.ui.previewTracker then self.ui.previewTracker:destroy() end
     self.ui:hide()
     self:renderJournal()
     local parent = self.ui:getParent()

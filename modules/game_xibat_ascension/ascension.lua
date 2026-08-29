@@ -200,6 +200,7 @@ function xibatAscensionController:renderCategory()
             card.icon:setImageSource(iconPaths[passive.icon])
             card.item:hide()
         elseif passive.previewItems[1] then
+            card.item:show()
             card.item:setItemId(passive.previewItems[1].clientId)
             card.item:setItemCount(passive.previewItems[1].count)
             card.icon:hide()
@@ -210,7 +211,7 @@ function xibatAscensionController:renderCategory()
         card.name:setText(passive.name)
         card.name:setTooltip(passive.name)
         card.requirement:setText(tr('Raid level %d', passive.raidLevel))
-        card.status:setText(unlocked and tr('UNLOCKED') or tr('%d points required', passive.unlockPoints))
+        card.status:setText(unlocked and tr('UNLOCKED') or tr('%d points\nrequired', passive.unlockPoints))
         card.status:setColor(unlocked and '#79c68b' or nextMilestone and '#e4b95e' or '#7e8b91')
         card:setOpacity((unlocked or nextMilestone) and 1 or 0.55)
         card.spend:setText(unlocked and tr('Unlocked') or tr('Spend %d', passive.cost))
@@ -294,6 +295,8 @@ end
 function xibatAscensionController:onInit()
     self.nextRequestId = 0
     self.categoryButtons = {}
+    self.ui.categoryRail:destroyChildren()
+    self.ui.nodes:destroyChildren()
     self.ui:hide()
     self.ui.reset.onClick = function() self:confirmReset() end
     self:registerExtendedJSONOpcode(ASCENSION_OPCODE, function(...) self:onOpcode(...) end)

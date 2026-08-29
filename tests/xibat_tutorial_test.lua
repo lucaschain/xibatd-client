@@ -47,6 +47,7 @@ local function makeWidget()
     function widget:raise() end
     function widget:focus() end
     function widget:destroy() self.destroyed = true end
+    function widget:destroyChildren() self.children = {} end
     function widget:setOn(on) self.on = on end
     function widget:setText(text) self.text = text end
     function widget:setEnabled(enabled) self.enabled = enabled end

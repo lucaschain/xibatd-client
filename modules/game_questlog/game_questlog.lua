@@ -477,6 +477,10 @@ local function setupQuestItemClickHandler(item, isQuestList)
         function item.iconPin:onClick(mousePos)
             local parent = self:getParent()
             parent.isPinned = not parent.isPinned
+            if parent.nativeQuest then
+                local controller = modules.game_xibat_quests and modules.game_xibat_quests.xibatQuestController
+                if controller then controller:setQuestTracked(parent.nativeQuest.id, parent.isPinned) end
+            end
             if parent.isPinned then
                 self:setImageColor("#00ff00")
                 local list = UITextList.questLogList
@@ -888,6 +892,7 @@ renderNativeQuestLine = function(quest)
     UITextList.questLogLine:destroyChildren()
     isUpdatingCheckbox = true
     UICheckBox.showInQuestTracker:setChecked(false)
+    UICheckBox.showInQuestTracker:setVisible(false)
     isUpdatingCheckbox = false
 
     local categoryColor = COLORS.BASE_1
@@ -921,6 +926,7 @@ function questLogController:setNativeQuestSnapshot(state)
     questLogController.ui.panelQuestLineSelected:setText("")
     questLogCache = { items = {}, completed = 0, hidden = 0, visible = 0 }
     if not state then
+        UICheckBox.showInQuestTracker:setVisible(g_game.getClientVersion() >= 1280)
         updateQuestCounter()
         return
     end
@@ -931,6 +937,9 @@ function questLogController:setNativeQuestSnapshot(state)
         local icon = quest.completed and "/game_cyclopedia/images/checkmark-icon" or ""
         local item = createQuestItem(UITextList.questLogList, index, quest.title, categoryColor, icon)
         item.nativeQuest = quest
+        local controller = modules.game_xibat_quests and modules.game_xibat_quests.xibatQuestController
+        item.isPinned = controller and controller:isQuestTracked(quest.id) or false
+        if item.isPinned then item.iconPin:setImageColor('#00ff00') end
         setupQuestItemClickHandler(item, true)
         categoryColor = categoryColor == COLORS.BASE_1 and COLORS.BASE_2 or COLORS.BASE_1
     end

@@ -11,3 +11,4 @@ XibatGuidanceEdge < UIWidget
     color: #fff0a8
     background-color: #111820cc
     text-wrap: true
+    text: "[NE] Reach the east gate"

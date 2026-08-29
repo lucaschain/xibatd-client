@@ -23,6 +23,7 @@ ShopCategory < FlatPanel
     text-offset: 24 0
     text-align: left
     color: #C0C0C0
+    text: Outfits
 
   UIWidget
     id: expandArrow
@@ -105,6 +106,7 @@ HistoryWidget < UIWidget
     anchors.left: parent.left
     margin-left: 1
     width: 130
+    text: 2026-08-28 14:30
 
   VerticalSeparator
     anchors.top: parent.top
@@ -118,6 +120,7 @@ HistoryWidget < UIWidget
     margin-left: 1
     size: 70 21
     color: #D33C3C
+    text: -500
     $on:
       color: #44AD25
 
@@ -145,6 +148,7 @@ HistoryWidget < UIWidget
     margin-left: 1
     margin-right: 1
     height: 21
+    text: Philosopher Outfit
 
 HistoryHeader < FlatPanel
   anchors.top: parent.top
@@ -199,7 +203,7 @@ ShopBalanceWidget < FlatPanel
     anchors.fill: parent
     margin-right: 20
     text-align: right
-    text: 0
+    text: 750
     color: #C0C0C0
 
   UIWidget
@@ -221,7 +225,7 @@ ShopBalanceSecondWidget < FlatPanel
     anchors.fill: parent
     margin-right: 20
     text-align: right
-    text: 0
+    text: 75
     color: #C0C0C0
 
   UIWidget
@@ -324,6 +328,7 @@ OfferWidget < FlatPanel
     text-align: topLeft
     text-wrap: true
     color: #C0C0C0
+    text: Philosopher Outfit
 
 MainWindow
   id: shopWindow
@@ -343,6 +348,9 @@ MainWindow
     image-color: #C0C0C0
     layout: verticalBox
     focusable: false
+
+    ShopCategory
+      id: previewShopCategory
 
   TextEdit
     id: searchTextEdit
@@ -468,6 +476,9 @@ MainWindow
       margin-bottom: 5
       layout: verticalBox
 
+      HistoryWidget
+        id: previewShopHistory
+
     Button
       id: prevPageButton
       text: Prev Page
@@ -502,7 +513,7 @@ MainWindow
     anchors.left: categoriesList.right
     anchors.bottom: categoriesList.bottom
     margin-left: 6
-    visible: false
+    visible: true
     focusable: false
 
     ScrollableFlatPanel
@@ -516,6 +527,19 @@ MainWindow
       width: 260
       vertical-scrollbar: offersListScrollBar
       layout: verticalBox
+
+      OfferWidget
+        id: previewShopOffer
+
+        UICreature
+          id: previewShopOfferOutfit
+          anchors.fill: parent
+          margin-right: 176
+          margin-bottom: 6
+          visible: true
+          phantom: true
+          animate: true
+          outfit-id: 873
 
     VerticalScrollBar
       id: offersListScrollBar
@@ -533,7 +557,7 @@ MainWindow
       anchors.right: parent.right
       margin-left: 5
       margin-right: 5
-      visible: false
+      visible: true
 
       Label
         id: name
@@ -541,6 +565,7 @@ MainWindow
         text-align: top
         margin-top: 3
         color: #C0C0C0
+        text: Philosopher Outfit
 
       FlatPanel
         id: imagePanel
@@ -561,8 +586,9 @@ MainWindow
           anchors.fill: parent
           margin-right: 6
           margin-bottom: 6
-          visible: false
+          visible: true
           animate: true
+          outfit-id: 873
         
         UICreature
           id: mount
@@ -586,9 +612,11 @@ MainWindow
         anchors.right: parent.right
         margin-left: 8
         margin-right: 3
+        text: Buy
 
       OfferBuyPrice
         id: price
+        text: 500
 
       OfferBuyButton
         id: additionalBuyButton
@@ -609,6 +637,10 @@ MainWindow
         padding: 5
         vertical-scrollbar: descriptionScrollBar
         layout: verticalBox
+
+        OfferDescriptionLabel
+          id: previewShopDescription
+          text: Unlocks the Philosopher outfit for this character, including both addons.
 
       VerticalScrollBar
         id: descriptionScrollBar

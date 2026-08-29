@@ -16,6 +16,7 @@ local function makeWidget(kind)
     local widget = { kind = kind, children = {}, visible = true, size = { width = 800, height = 600 } }
     function widget:isDestroyed() return self.destroyed == true end
     function widget:destroy() self.destroyed = true end
+    function widget:destroyChildren() self.children = {} end
     function widget:hide() self.visible = false end
     function widget:show() self.visible = true end
     function widget:isVisible() return self.visible end
@@ -29,13 +30,17 @@ local function makeWidget(kind)
     function widget:setSize(value) self.size = value end
     function widget:setWidth(value) self.width = value end
     function widget:setPosition(value) self.position = value end
+    function widget:getPosition() return self.position end
+    function widget:bindRectToParent() self.bound = true end
     function widget:getSize() return self.size end
     function widget:getParent() return self.parent end
     function widget:insertChild(_, child) table.insert(self.children, child) end
     if kind == 'XibatQuestCard' then
         for _, id in ipairs({ 'title', 'status', 'objective', 'progress', 'progressText' }) do widget[id] = makeWidget(id) end
     elseif kind == 'XibatQuestTracker' then
-        for _, id in ipairs({ 'title', 'status', 'objective', 'progress', 'progressText' }) do widget[id] = makeWidget(id) end
+        for _, id in ipairs({ 'title', 'status', 'objective', 'progress', 'progressText', 'closeButton' }) do
+            widget[id] = makeWidget(id)
+        end
     end
     return widget
 end
@@ -61,9 +66,10 @@ local environment = {
         game_interface = { getMapPanel = function() return mapPanel end },
         client_topmenu = {},
     },
-    Controller = {}, g_ui = {}, g_logger = {}, tr = function(text) return text end,
+    Controller = {}, g_ui = {}, g_logger = {}, g_settings = {}, tr = function(text) return text end,
     g_game = {
         isOnline = function() return true end,
+        getCharacterName = function() return 'Fixture Knight' end,
         getProtocolGame = function()
             return {
                 sendExtendedJSONOpcode = function(_, opcode, payload)
@@ -73,6 +79,9 @@ local environment = {
         end,
     },
 }
+local settings = {}
+function environment.g_settings.getNode(key) return settings[key] end
+function environment.g_settings.setNode(key, value) settings[key] = value end
 function environment.Controller:new()
     local controller = {}
     function controller:setUI(name) self.uiName = name end
@@ -83,7 +92,7 @@ function environment.Controller:new()
 end
 function environment.g_ui.createWidget(kind, owner)
     local widget = makeWidget(kind)
-    if owner then table.insert(owner.children, widget) end
+    if owner then widget.parent = owner table.insert(owner.children, widget) end
     return widget
 end
 function environment.g_logger.warning(message) table.insert(state.logs, message) end
@@ -141,6 +150,28 @@ requireValue(controller.tracker and controller.tracker.title.text == 'First Watc
     state.syncRequest and state.syncRequest.opcode == 210 and state.syncRequest.payload.version == 1 and
     state.syncRequest.payload.action == 'sync',
     'game-start deferral did not create the compact active tracker')
+controller.tracker.closeButton.onClick()
+requireValue(not controller.tracker and state.guidance.cue,
+    'tracker close-button binding did not dismiss only the floating box')
+controller:setQuestTracked('arrival', true)
+controller:setQuestTracked('arrival', false)
+requireValue(not controller.tracker and not state.guidance.cue and
+    settings.xibatQuestPresentation.characters['fixture knight'].tracked.arrival == false,
+    'unpinning did not persist or suppress the tracker and guidance')
+controller:setQuestTracked('arrival', true)
+requireValue(controller.tracker and state.guidance.cue,
+    'repinning did not restore the tracker and guidance')
+controller:dismissTracker()
+controller:renderTracker()
+requireValue(not controller.tracker and state.guidance.cue,
+    'dismissing the tracker also removed guidance or was undone for the same stage')
+controller:setQuestTracked('arrival', true)
+requireValue(controller.tracker, 'repinning did not restore a dismissed tracker')
+controller.tracker:setPosition({ x = 100, y = 90 })
+controller.tracker.onDragLeave(controller.tracker)
+controller:renderTracker()
+requireValue(controller.tracker.position.x == 100 and controller.tracker.position.y == 90 and controller.tracker.bound,
+    'tracker position did not survive recreation')
 
 local tooManyQuests = {}
 for index = 1, 65 do table.insert(tooManyQuests, quest('quest.' .. index)) end
@@ -196,12 +227,29 @@ state.callbacks[210](nil, 210, {
 requireValue(controller.tracker.title.text == 'Second Quest' and
     controller.tracker.status.text == 'ACTIVE' and state.guidance.cue.id == 'second:reach_gate',
     'active switch did not select exactly one tracker and guidance cue')
-
+controller:dismissTracker()
 state.callbacks[210](nil, 210, {
     version = 1, type = 'delta', baseRevision = 9, revision = 10,
+    upsert = {}, remove = {}, active = active('second'),
+})
+requireValue(not controller.tracker and state.guidance.cue,
+    'same-stage delta restored a dismissed tracker or removed guidance')
+
+local advancedSecond = quest('second', 'enter_gate', false, {
+    stage('reach_gate', 1, 1, true, false), stage('enter_gate'),
+})
+state.callbacks[210](nil, 210, {
+    version = 1, type = 'delta', baseRevision = 10, revision = 11,
+    upsert = { advancedSecond }, remove = {}, active = active('second', 'enter_gate'),
+})
+requireValue(controller.tracker and controller.tracker.title.text == 'Second Quest' and
+    state.guidance.cue.id == 'second:enter_gate', 'next stage did not restore a dismissed tracker')
+
+state.callbacks[210](nil, 210, {
+    version = 1, type = 'delta', baseRevision = 11, revision = 12,
     upsert = {}, remove = { 'arrival', 'second' }, active = false,
 })
-requireValue(controller.revision == 10 and #controller.quests == 0 and ui.emptyState.visible and
+requireValue(controller.revision == 12 and #controller.quests == 0 and ui.emptyState.visible and
     not controller.tracker and not state.guidance.cue,
     'removal delta did not clear journal, tracker, and guidance')
 

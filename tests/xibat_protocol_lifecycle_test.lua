@@ -122,6 +122,7 @@ local timerState = {
     events = {},
     nextEvent = 1,
     now = 1000,
+    settings = {},
 }
 
 local function activeEvents()
@@ -139,12 +140,15 @@ local timerEnvironment = {
         },
     },
     Controller = {},
+    g_settings = {},
     os = {
         time = function()
             return timerState.now
         end,
     },
 }
+function timerEnvironment.g_settings.getNode(key) return timerState.settings[key] end
+function timerEnvironment.g_settings.setNode(key, value) timerState.settings[key] = value end
 
 function timerEnvironment.Controller:new()
     local controller = {}
@@ -190,9 +194,14 @@ local timerUI = {
     visible = true,
     title = makeLabel(),
     clock = makeLabel(),
+    closeButton = {},
 }
 function timerUI:hide() self.visible = false end
 function timerUI:show() self.visible = true end
+function timerUI:breakAnchors() self.anchorsBroken = true end
+function timerUI:setPosition(position) self.position = position end
+function timerUI:getPosition() return self.position end
+function timerUI:bindRectToParent() self.bound = true end
 
 loadModule("modules/game_xibat_timer/raid_timer.lua", timerEnvironment)
 local timerController = timerEnvironment.raidTimerController
@@ -215,10 +224,17 @@ end
 timerState.callbacks[204](nil, 204, { action = "start", name = "Time Left", expires = 1061 })
 requireValue(timerUI.visible and timerUI.title.text == "Time Left" and timerUI.clock.text == "01:01" and
     activeEvents() == 1, "valid timer did not render or schedule one event")
+timerUI.closeButton.onClick()
+requireValue(not timerUI.visible and activeEvents() == 1,
+    "dismissing timer cancelled authoritative countdown state")
+timerUI.position = { x = 77, y = 88 }
+timerUI.onDragLeave(timerUI)
+requireValue(timerState.settings.xibatRaidTimer.position.x == 77 and
+    timerState.settings.xibatRaidTimer.position.y == 88, "timer position was not persisted")
 
 timerState.callbacks[204](nil, 204, { action = "start", name = "Starting In", expires = 1030 })
-requireValue(timerUI.title.text == "Starting In" and activeEvents() == 1,
-    "timer replacement retained a stale event")
+requireValue(timerUI.visible and timerUI.title.text == "Starting In" and activeEvents() == 1,
+    "timer replacement retained a stale event or remained dismissed")
 
 timerState.callbacks[204](nil, 204, { action = "stop" })
 requireValue(not timerUI.visible and activeEvents() == 0, "timer stop retained UI or scheduled work")

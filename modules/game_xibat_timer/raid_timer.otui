@@ -1,4 +1,4 @@
-UIWidget
+UIWindow
   id: xibatRaidTimer
   size: 184 58
   anchors.top: parent.top
@@ -8,8 +8,9 @@ UIWidget
   border-width: 1
   border-color: #3d5363
   focusable: false
-  phantom: true
-  visible: false
+  phantom: false
+  draggable: true
+  visible: true
 
   UIWidget
     id: accent
@@ -23,7 +24,7 @@ UIWidget
   Label
     id: title
     anchors.left: accent.right
-    anchors.right: parent.right
+    anchors.right: closeButton.left
     anchors.top: parent.top
     margin-left: 12
     margin-right: 10
@@ -33,6 +34,7 @@ UIWidget
     text-align: center
     text-auto-resize: true
     phantom: true
+    text: WAVE STARTS IN
 
   Label
     id: clock
@@ -44,7 +46,24 @@ UIWidget
     margin-bottom: 6
     font: verdana-11px-rounded
     color: #f4d08a
-    text: 00:00
+    text: 01:24
     text-align: center
     text-auto-resize: true
     phantom: true
+
+  UIButton
+    id: closeButton
+    anchors.top: parent.top
+    anchors.right: parent.right
+    margin-top: 5
+    margin-right: 5
+    size: 12 12
+    image-size: 14 14
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 28 0 14 14
+
+    $hover:
+      image-clip: 28 14 14 14
+
+    $pressed:
+      image-clip: 28 28 14 14
