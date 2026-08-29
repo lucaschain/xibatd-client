@@ -2,6 +2,8 @@ local RAID_OPCODE = modules.game_xibat_core.XibatOpcode.RaidSelector
 local RESET_TICK_INTERVAL = 1000
 local MAX_RAIDS = 64
 local MAX_REWARDS = 128
+local RAID_IMAGE_WIDTH = 480
+local RAID_IMAGE_HEIGHT = 390
 
 local tierColors = {
     bronze = '#cd8a54',
@@ -250,6 +252,11 @@ function raidSelectorController:onRaidOpcode(_, _, payload)
     self:openSelector(payload.body)
 end
 
+function raidSelectorController:updateScreenshotHeight(widget)
+    local height = math.floor(widget:getWidth() * RAID_IMAGE_HEIGHT / RAID_IMAGE_WIDTH + 0.5)
+    if widget:getHeight() ~= height then widget:setHeight(height) end
+end
+
 function raidSelectorController:onInit()
     self.ui:hide()
     self.raidList = self.ui:recursiveGetChildById('raidList')
@@ -258,6 +265,8 @@ function raidSelectorController:onInit()
     end
     self.raidList:destroyChildren()
     self.ui.detail.rewards:destroyChildren()
+    self.ui.detail.screenshot.onGeometryChange = function(widget) self:updateScreenshotHeight(widget) end
+    self:updateScreenshotHeight(self.ui.detail.screenshot)
     self:registerExtendedJSONOpcode(RAID_OPCODE, function(...)
         self:onRaidOpcode(...)
     end)

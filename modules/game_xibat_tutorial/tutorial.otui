@@ -6,7 +6,7 @@ XibatTutorialTopicButton < Button
   font: verdana-11px-rounded
 
   $pressed:
-    text-offset: 0 0
+    text-offset: -1 1
 
   $on:
     text-offset: 0 0

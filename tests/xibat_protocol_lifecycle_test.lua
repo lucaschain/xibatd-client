@@ -279,6 +279,9 @@ local function makeSelectorWidget()
     function widget:setTooltip(tooltip) self.tooltip = tooltip end
     function widget:setItemId(itemId) self.itemId = itemId end
     function widget:setImageSource(imageSource) self.imageSource = imageSource end
+    function widget:getWidth() return self.width end
+    function widget:getHeight() return self.height end
+    function widget:setHeight(height) self.height = height end
     return widget
 end
 
@@ -297,6 +300,8 @@ end
 for _, id in ipairs({ 'name', 'mode', 'tier', 'waves', 'progress', 'screenshot', 'description', 'rewards', 'rewardsTitle', 'startButton' }) do
     selectorUI.detail[id] = makeSelectorWidget()
 end
+selectorUI.detail.screenshot.width = 610
+selectorUI.detail.screenshot.height = 100
 
 local selectorEnvironment = {
     modules = {
@@ -373,7 +378,8 @@ loadModule("modules/game_xibat_raid/raid_selector.lua", selectorEnvironment)
 local selectorController = selectorEnvironment.raidSelectorController
 selectorController.ui = selectorUI
 selectorController:onInit()
-requireValue(selectorState.callbacks[207], "selector opcode callback was not registered")
+requireValue(selectorState.callbacks[207] and selectorUI.detail.screenshot.height == 496,
+    "selector opcode callback or aspect-fitted screenshot was not initialized")
 
 local invalidSelector = {
     action = 'openRaidSelector',

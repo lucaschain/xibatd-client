@@ -61,7 +61,7 @@ XibatRaidReward < Item
 MainWindow
   id: xibatRaidSelector
   !text: tr('Raid Command')
-  size: 900 650
+  size: 1000 915
   @onEscape: raidSelectorController:close()
 
   Label
@@ -180,48 +180,49 @@ MainWindow
       text: Forest
 
     Label
-      id: tier
+      id: mode
       anchors.right: parent.right
       anchors.top: parent.top
-      color: #f4d08a
-      text-auto-resize: true
-      text: BRONZE
-
-    Label
-      id: mode
-      anchors.left: parent.left
-      anchors.top: name.bottom
-      margin-top: 8
       color: #84b9c8
       text-auto-resize: true
       text: SURVIVAL
 
     Label
       id: waves
-      anchors.right: parent.right
+      anchors.left: parent.left
       anchors.top: name.bottom
-      margin-top: 8
+      margin-top: 4
       color: #b5c0c6
       text-auto-resize: true
       text: 6 / 10 waves
+
+    Label
+      id: tier
+      anchors.right: parent.right
+      anchors.top: name.bottom
+      margin-top: 4
+      color: #f4d08a
+      text-auto-resize: true
+      text: BRONZE
 
     ProgressBar
       id: progress
       height: 14
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.top: mode.bottom
-      margin-top: 10
+      anchors.top: waves.bottom
+      margin-top: 6
       background-color: #617782
       value: 60
 
     UIWidget
       id: screenshot
-      size: 336 273
-      anchors.horizontalCenter: parent.horizontalCenter
+      height: 578
+      anchors.left: progress.left
+      anchors.right: progress.right
       anchors.top: progress.bottom
-      margin-top: 12
-      image-fixed-ratio: true
+      margin-top: 8
+      image-fixed-ratio: false
       image-smooth: false
       background-color: #10181d
       border-width: 1
@@ -233,8 +234,8 @@ MainWindow
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: screenshot.bottom
-      margin-top: 12
-      height: 58
+      margin-top: 8
+      height: 40
       text-wrap: true
       text-align: top-left
       color: #c4ccd1
@@ -244,7 +245,7 @@ MainWindow
       id: rewardsTitle
       anchors.left: parent.left
       anchors.top: description.bottom
-      margin-top: 12
+      margin-top: 4
       !text: tr('Possible rewards')
       color: #9da9b0
       text-auto-resize: true
@@ -255,7 +256,7 @@ MainWindow
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: rewardsTitle.bottom
-      margin-top: 7
+      margin-top: 4
       layout:
         type: grid
         cell-size: 40 40
