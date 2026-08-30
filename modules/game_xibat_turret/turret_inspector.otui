@@ -1,14 +1,15 @@
 XibatTurretUpgradeBadge < Label
-  size: 13 13
+  size: 16 16
   text: +
   text-align: center
+  text-offset: 0 -1
   font: verdana-11px-rounded
   color: #2a1b08
   background-color: #f2bd55ee
   border-width: 1
   border-color: #fff0a8
-  margin-left: 19
-  margin-top: -3
+  margin-left: 24
+  margin-top: -7
   phantom: true
   focusable: false
   draggable: false
