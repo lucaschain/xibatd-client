@@ -388,9 +388,19 @@ local function tryLogin(charInfo, tries)
         return
     end
 
+    local worldHost = charInfo.worldHost
+    if g_platform.isBrowser() then
+        worldHost = charInfo.worldWebSocketUrl
+        if not worldHost or worldHost == '' then
+            displayErrorBox(tr('Login Error'), tr('Missing browser WebSocket endpoint for this world.'))
+            CharacterList.show()
+            return
+        end
+    end
+
     CharacterList.hide()
 
-    g_game.loginWorld(G.account, G.password, charInfo.worldName, charInfo.worldHost, charInfo.worldPort,
+    g_game.loginWorld(G.account, G.password, charInfo.worldName, worldHost, charInfo.worldPort,
                       charInfo.characterName, G.authenticatorToken, G.sessionKey)
 
     loadBox = displayCancelBox(tr('Please wait'), tr('Connecting to game server...'))
@@ -451,6 +461,7 @@ local function resendWait()
                     worldHost = selected.worldHost,
                     worldPort = selected.worldPort,
                     worldName = selected.worldName,
+                    worldWebSocketUrl = selected.worldWebSocketUrl,
                     characterName = selected.characterName,
                     characterLevel = selected.characterLevel,
                     main = selected.main,
@@ -830,6 +841,7 @@ function CharacterList.rebuildCharactersList()
         widget.worldName = characterInfo.worldName
         widget.worldHost = characterInfo.worldIp
         widget.worldPort = characterInfo.worldPort
+        widget.worldWebSocketUrl = characterInfo.worldWebSocketUrl
 
         local pinButton = widget:getChildById('pin')
         if pinButton then
@@ -928,6 +940,7 @@ function CharacterList.doLogin()
             worldHost = selected.worldHost,
             worldPort = selected.worldPort,
             worldName = selected.worldName,
+            worldWebSocketUrl = selected.worldWebSocketUrl,
             characterName = selected.characterName
         }
         charactersWindow:hide()

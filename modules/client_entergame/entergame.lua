@@ -21,6 +21,28 @@ local authErrorBox
 local hasAttemptedAuthenticator = false
 
 -- private functions
+local function getConfiguredServer()
+    return Servers_init and Servers_init[G.host]
+end
+
+local function resolveBrowserWorldEndpoints(characters)
+    if not g_platform.isBrowser() then
+        return true
+    end
+
+    local server = getConfiguredServer()
+    for _, characterInfo in pairs(characters) do
+        local url, errorMessage = WebSocketEndpoints.resolveWorld(
+            server, characterInfo.worldId or characterInfo.worldid, characterInfo.worldName)
+        if not url then
+            return false, errorMessage
+        end
+        characterInfo.worldWebSocketUrl = url
+    end
+
+    return true
+end
+
 local function onError(protocol, message, errorCode)
     if loadBox then
         loadBox:destroy()
@@ -67,6 +89,11 @@ end
 
 local function onCharacterList(protocol, characters, account, otui)
     local httpLogin = enterGame:getChildById('httpLoginBox'):isChecked()
+    local endpointsResolved, endpointError = resolveBrowserWorldEndpoints(characters)
+    if not endpointsResolved then
+        onError(protocol, endpointError, -1)
+        return
+    end
 
     -- Try add server to the server list
     ServerList.add(G.host, G.port, g_game.getClientVersion(), httpLogin)
@@ -723,6 +750,7 @@ function EnterGame.loginSuccess(requestId, jsonSession, jsonWorlds, jsonCharacte
     local worlds = {}
     for _, world in ipairs(json.decode(jsonWorlds)) do
         worlds[world.id] = {
+            id = world.id,
             name = world.name,
             ip = world.externaladdressprotected,
             port = world.externalportprotected,
@@ -750,6 +778,7 @@ function EnterGame.loginSuccess(requestId, jsonSession, jsonWorlds, jsonCharacte
             worldName = world.name,
             worldIp = world.ip,
             worldPort = world.port,
+            worldId = world.id,
             previewState = world.previewstate,
             pvptype = world.pvptype,
         }
@@ -787,6 +816,19 @@ function EnterGame.doLogin()
     local clientVersion = tonumber(clientBox:getText())
     G.clientVersion = clientVersion
     local httpLogin = enterGame:getChildById('httpLoginBox'):isChecked()
+    local browserLoginUrl
+
+    if g_platform.isBrowser() then
+        local endpointError
+        browserLoginUrl, endpointError = WebSocketEndpoints.resolveLogin(getConfiguredServer())
+        if not browserLoginUrl then
+            local errorBox = displayErrorBox(tr('Login Error'), endpointError)
+            connect(errorBox, {
+                onOk = EnterGame.show
+            })
+            return
+        end
+    end
 
     if g_game.isOnline() then
         local errorBox = displayErrorBox(tr('Login Error'), tr('Cannot login while already in game.'))
@@ -819,7 +861,7 @@ function EnterGame.doLogin()
 
     EnterGame.hide()
 
-    if clientVersion >= 1281 and G.port ~= 7171 then
+    if not browserLoginUrl and clientVersion >= 1281 and G.port ~= 7171 then
         EnterGame.tryHttpLogin(clientVersion, httpLogin)
     else
         protocolLogin = ProtocolLogin.create()
@@ -844,7 +886,7 @@ function EnterGame.doLogin()
         g_game.chooseRsa(G.host)
 
         if modules.game_things.isLoaded() then
-            protocolLogin:login(G.host, G.port, G.account, G.password, G.authenticatorToken, G.stayLogged)
+            protocolLogin:login(G.host, G.port, G.account, G.password, G.authenticatorToken, G.stayLogged, browserLoginUrl)
         else
             if loadBox then
                 loadBox:destroy()

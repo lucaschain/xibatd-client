@@ -49,6 +49,49 @@ select **Start**.
 The helper adds the required cross-origin isolation headers. Production hosting
 must provide equivalent headers over HTTPS.
 
+## Configure WebSockets
+
+Browser builds require explicit login and world WebSocket endpoints in the
+selected `Servers_init` entry. Native builds ignore this table and continue to
+use the existing TCP host and port.
+
+Production example:
+
+```lua
+["game.example.com"] = {
+    port = 7171,
+    protocol = 1098,
+    httpLogin = false,
+    browserWebSocket = {
+        login = "wss://play.example.com/login",
+        world = "wss://play.example.com/world/{worldId}"
+    }
+}
+```
+
+Local development can use an explicit insecure endpoint:
+
+```lua
+browserWebSocket = {
+    login = "ws://127.0.0.1:8080/login",
+    world = "ws://127.0.0.1:8080/world/{worldId}"
+}
+```
+
+The world template supports `{worldId}` and `{worldName}`. World names are
+percent-encoded as one URL path segment. A template requiring `{worldId}` fails
+with a clear error when a legacy login response does not include an ID; use
+`{worldName}` for those protocols.
+
+WebSocket payloads contain the unchanged native protocol bytes. The server must
+accept the `binary` WebSocket subprotocol and feed binary payload bytes into the
+same stream-oriented packet decoder used by TCP sessions. Do not add another
+length prefix around WebSocket messages.
+
+Use `wss://` when the client page is served over HTTPS. Browsers block insecure
+`ws://` connections from secure pages except in limited local-development
+contexts.
+
 ## Baseline Check
 
 For a browser toolchain or packaging change, verify all of the following:

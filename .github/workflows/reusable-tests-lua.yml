@@ -35,6 +35,7 @@ jobs:
 
       - name: Run Xibat protocol lifecycle tests
         run: |
+          luajit tests/browser_websocket_endpoints_test.lua "$PWD"
           luajit tests/xibat_protocol_lifecycle_test.lua "$PWD"
           luajit tests/xibat_turret_inspector_test.lua "$PWD"
           luajit tests/xibat_forge_test.lua "$PWD"

@@ -15,7 +15,7 @@ LoginServerExtendedCharacterList = 101
 LoginServerRetry = 10
 LoginServerErrorNew = 11
 
-function ProtocolLogin:login(host, port, accountName, accountPassword, authenticatorToken, stayLogged)
+function ProtocolLogin:login(host, port, accountName, accountPassword, authenticatorToken, stayLogged, webSocketUrl)
     if string.len(host) == 0 or port == nil or port == 0 then
         signalcall(self.onLoginError, self, tr('You must enter a valid server address and port.'))
         return
@@ -27,7 +27,7 @@ function ProtocolLogin:login(host, port, accountName, accountPassword, authentic
     self.stayLogged = stayLogged
     self.connectCallback = self.sendLoginPacket
 
-    self:connect(host, port)
+    self:connect(webSocketUrl or host, port)
 end
 
 function ProtocolLogin:cancelLogin()
@@ -225,6 +225,7 @@ function ProtocolLogin:parseCharacterList(msg)
             character.worldName = worlds[worldId].worldName
             character.worldIp = worlds[worldId].worldIp
             character.worldPort = worlds[worldId].worldPort
+            character.worldId = worldId
             character.previewState = worlds[worldId].previewState
             characters[i] = character
         end

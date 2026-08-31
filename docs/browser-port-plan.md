@@ -17,6 +17,13 @@ Agreed decisions:
 - Initial browser support targets current desktop browsers. Mobile browser
   support is out of scope for the first release.
 
+Current implementation status:
+
+- Phase 0 is complete and recorded in `docs/building/browser-baseline.md`.
+- Phase 1 client endpoint configuration is implemented.
+- The server WebSocket transport and end-to-end WSS gameplay validation remain
+  pending in the server codebase.
+
 ## Goals
 
 - Run the complete client in a supported desktop browser.

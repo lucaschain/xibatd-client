@@ -3,6 +3,8 @@
 *.lua eol=lf 
 *.md  text eol=lf
 *.sh  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 *.txt eol=lf 
 *.ot* eol=lf 
 *.cpp eol=lf 

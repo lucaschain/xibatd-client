@@ -81,7 +81,7 @@ void WebConnection::close()
     });
 }
 
-void WebConnection::connect(const std::string_view host, uint16_t port, const std::function<void()>& connectCallback, bool gameWorld)
+void WebConnection::connect(const std::string_view host, uint16_t /*port*/, const std::function<void()>& connectCallback, bool gameWorld)
 {
     m_gameWorld = gameWorld;
 
@@ -89,18 +89,19 @@ void WebConnection::connect(const std::string_view host, uint16_t port, const st
     m_connecting = true;
     m_connectCallback = connectCallback;
 
-    std::string ip = std::string(host);
-    ip.length() == 0 ? ip = "localhost" : ip;
-
-#ifdef NDEBUG
-    const std::string prefix = "wss://";
-#else
-    const std::string prefix = "ws://";
-#endif
+    const std::string url(host);
+    if (!url.starts_with("ws://") && !url.starts_with("wss://")) {
+        g_logger.error("Browser connections require an explicit ws:// or wss:// endpoint");
+        const auto errorCallback = std::move(m_errorCallback);
+        m_connecting = false;
+        m_connectCallback = nullptr;
+        if (errorCallback)
+            errorCallback(asio::error::invalid_argument);
+        return;
+    }
 
     m_pthread = pthread_self();
 
-    const std::string url = prefix + ip + ":" + std::to_string(port);
     EmscriptenWebSocketCreateAttributes attributes =
     {
         url.c_str(),
@@ -111,10 +112,12 @@ void WebConnection::connect(const std::string_view host, uint16_t port, const st
     m_websocket = emscripten_websocket_new(&attributes);
 
     if (m_websocket < 1) {
-        if (m_errorCallback)
-            m_errorCallback(asio::error::network_unreachable);
-
-        close();
+        const auto errorCallback = std::move(m_errorCallback);
+        m_connecting = false;
+        m_connectCallback = nullptr;
+        m_websocket = 0;
+        if (errorCallback)
+            errorCallback(asio::error::network_unreachable);
         return;
     }
 
