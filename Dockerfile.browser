@@ -4,6 +4,7 @@
 #   docker cp otclient-web-tmp:/otclient-web ./build-emscripten-web
 #   docker rm otclient-web-tmp
 FROM ubuntu:24.04 AS builder
+ARG EMSDK_VERSION=6.0.8
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y
 RUN apt-get -y full-upgrade
@@ -35,9 +36,9 @@ RUN apt-get install -y --no-install-recommends \
 SHELL ["/bin/bash", "-lc"]
 
 WORKDIR /opt
-RUN git clone --filter=blob:none --single-branch --depth 1 https://github.com/emscripten-core/emsdk.git emsdk \
- && /opt/emsdk/emsdk install latest \
- && /opt/emsdk/emsdk activate latest
+RUN git clone --filter=blob:none --single-branch --depth 1 --branch ${EMSDK_VERSION} https://github.com/emscripten-core/emsdk.git emsdk \
+ && /opt/emsdk/emsdk install ${EMSDK_VERSION} \
+ && /opt/emsdk/emsdk activate ${EMSDK_VERSION}
 
 ENV VCPKG_ROOT=/opt/vcpkg
 COPY vcpkg.json /tmp/vcpkg.json
@@ -55,6 +56,7 @@ ENV BUILD_DIR=/workspace/build-emscripten
 RUN mkdir -p ${BUILD_DIR}
 # Force complete rebuild by clearing all vcpkg and emscripten caches
 RUN source /opt/emsdk/emsdk_env.sh \
+ && emcc --version \
  && rm -rf ${VCPKG_ROOT}/buildtrees ${VCPKG_ROOT}/packages ${BUILD_DIR}/vcpkg_installed \
  && rm -rf /opt/emsdk/upstream/emscripten/cache \
  && cmake -G Ninja -S /workspace -B ${BUILD_DIR} \

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Build the browser image and export its static bundle for local testing or CI.
 set -euxo pipefail
 
 cd "$(dirname "$0")"
