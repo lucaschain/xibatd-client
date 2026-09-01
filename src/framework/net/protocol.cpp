@@ -83,9 +83,20 @@ void Protocol::connect(const std::string_view host, const uint16_t port)
 #else
 void Protocol::connect(const std::string_view host, uint16_t port, bool gameWorld)
 {
+    if (m_connection)
+        m_connection->close();
+
+    m_disconnected = false;
     m_connection = std::make_shared<WebConnection>();
-    m_connection->setErrorCallback([capture0 = asProtocol()](auto&& PH1) { capture0->onError(std::forward<decltype(PH1)>(PH1));    });
-    m_connection->connect(host, port, [capture0 = asProtocol()] { capture0->onConnect(); }, gameWorld);
+    std::weak_ptr<Protocol> weakSelf = asProtocol();
+    m_connection->setErrorCallback([weakSelf](auto&& error) {
+        if (const auto self = weakSelf.lock())
+            self->onError(std::forward<decltype(error)>(error));
+    });
+    m_connection->connect(host, port, [weakSelf] {
+        if (const auto self = weakSelf.lock(); self && !self->m_disconnected)
+            self->onConnect();
+    }, gameWorld);
 }
 #endif
 
@@ -193,11 +204,13 @@ void Protocol::recv()
     m_inputMessage->setHeaderSize(headerSize);
 
     // read the first 2 bytes which contain the message size
-    if (m_connection)
-        m_connection->read(2, [capture0 = asProtocol()](auto&& PH1, auto&& PH2) {
-        capture0->internalRecvHeader(std::forward<decltype(PH1)>(PH1),
-        std::forward<decltype(PH2)>(PH2));
-    });
+    if (m_connection) {
+        std::weak_ptr<Protocol> weakSelf = asProtocol();
+        m_connection->read(2, [weakSelf](auto&& buffer, auto&& size) {
+            if (const auto self = weakSelf.lock())
+                self->internalRecvHeader(std::forward<decltype(buffer)>(buffer), std::forward<decltype(size)>(size));
+        });
+    }
 }
 
 void Protocol::internalRecvHeader(const uint8_t* buffer, const uint16_t size)
@@ -216,11 +229,13 @@ void Protocol::internalRecvHeader(const uint8_t* buffer, const uint16_t size)
     }
 
     // read remaining message data
-    if (m_connection)
-        m_connection->read(static_cast<uint16_t>(remainingSize), [capture0 = asProtocol()](auto&& PH1, auto&& PH2) {
-        capture0->internalRecvData(std::forward<decltype(PH1)>(PH1),
-        std::forward<decltype(PH2)>(PH2));
-    });
+    if (m_connection) {
+        std::weak_ptr<Protocol> weakSelf = asProtocol();
+        m_connection->read(static_cast<uint16_t>(remainingSize), [weakSelf](auto&& buffer, auto&& size) {
+            if (const auto self = weakSelf.lock())
+                self->internalRecvData(std::forward<decltype(buffer)>(buffer), std::forward<decltype(size)>(size));
+        });
+    }
 }
 
 void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)

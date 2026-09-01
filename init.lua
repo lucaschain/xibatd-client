@@ -68,10 +68,10 @@ if ENABLE_SERVERS then
             httpLogin = false,
             useAuthenticator = false,
             -- Required by browser builds. Use wss:// outside local development.
-            -- browserWebSocket = {
-            --     login = "ws://127.0.0.1:8080/login",
-            --     world = "ws://127.0.0.1:8080/world/{worldId}"
-            -- }
+            browserWebSocket = {
+                login = "ws://127.0.0.1:7173/login",
+                world = "ws://127.0.0.1:7173/world/{worldId}"
+            }
         }
     }
 end

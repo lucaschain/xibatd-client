@@ -25,8 +25,11 @@
 #ifdef __EMSCRIPTEN__
 
 #include "declarations.h"
+#include <framework/core/declarations.h>
 #include <framework/luaengine/luaobject.h>
 #include <emscripten/websocket.h>
+
+#include <atomic>
 
 class WebConnection : public LuaObject
 {
@@ -38,7 +41,8 @@ class WebConnection : public LuaObject
         READ_TIMEOUT = 30,
         WRITE_TIMEOUT = 30,
         SEND_BUFFER_SIZE = 65536,
-        RECV_BUFFER_SIZE = 65536
+        RECV_BUFFER_SIZE = 65536,
+        MAX_BUFFERED_BYTES = RECV_BUFFER_SIZE * 4
     };
 
 public:
@@ -52,7 +56,7 @@ public:
     void close();
 
     void write(uint8_t* buffer, size_t size);
-    void read(const uint16_t size, const RecvCallback& callback, int tries = 0);
+    void read(uint16_t size, const RecvCallback& callback);
 
     void setErrorCallback(const ErrorCallback& errorCallback) { m_errorCallback = errorCallback; }
 
@@ -66,27 +70,37 @@ public:
 protected:
     bool sendPacket(uint8_t* buffer, uint16_t size);
 
+    void cleanup(bool sendCloseFrame);
+    void handleOpen(EMSCRIPTEN_WEBSOCKET_T socket);
+    void handleMessage(EMSCRIPTEN_WEBSOCKET_T socket, std::vector<uint8_t> payload, size_t reservedSize, bool isText);
+    void handleRemoteError(EMSCRIPTEN_WEBSOCKET_T socket, const std::error_code& error, bool sendCloseFrame);
+    void finishDeferredError();
+    void notifyError(const std::error_code& error, bool sendCloseFrame = true);
+    bool reserveBufferedBytes(size_t size);
+    void releaseBufferedBytes(size_t size);
+    void scheduleReadCompletion();
+    void tryCompleteRead();
     void internal_write();
-    void onWrite(const std::shared_ptr<asio::streambuf>&
-                 outputStream);
-    void onRecv(const uint16_t recvSize);
-    void onTimeout();
-
-    static void runOnConnectCallback(std::function<void()> callback);
-    static void runOnErrorCallback(ErrorCallback callback);
+    void onWrite(const std::shared_ptr<asio::streambuf>& outputStream);
 
     std::function<void()> m_connectCallback;
     ErrorCallback m_errorCallback;
     RecvCallback m_recvCallback;
+    ScheduledEventPtr m_readTimeoutEvent;
+    uint16_t m_pendingReadSize{ 0 };
+    uint64_t m_readCompletionGeneration{ 0 };
+    std::atomic<size_t> m_bufferedBytes{ 0 };
+    std::error_code m_deferredError;
 
     EMSCRIPTEN_WEBSOCKET_T m_websocket = 0;
-    bool m_gameWorld;
-    pthread_t m_pthread;
 
     static std::list<std::shared_ptr<asio::streambuf>> m_outputStreams;
     std::shared_ptr<asio::streambuf> m_outputStream;
     bool m_connected{ false };
     bool m_connecting{ false };
+    bool m_readCompletionPending{ false };
+    bool m_remoteErrorPending{ false };
+    bool m_sendCloseFrameOnError{ true };
     stdext::timer m_activityTimer;
 
     asio::streambuf m_inputStream;

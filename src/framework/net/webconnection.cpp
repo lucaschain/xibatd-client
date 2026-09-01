@@ -25,14 +25,9 @@
 #include "webconnection.h"
 
 #include <framework/core/application.h>
-#include <client/game.h>
 
 #include <utility>
-#include <asio/read.hpp>
-#include <asio/read_until.hpp>
 #include <framework/core/eventdispatcher.h>
-
-#include <emscripten/threading.h>
 
 std::list<std::shared_ptr<asio::streambuf>> WebConnection::m_outputStreams;
 WebConnection::WebConnection()
@@ -54,36 +49,62 @@ void WebConnection::poll()
 void WebConnection::terminate()
 {
     emscripten_websocket_deinitialize();
+    m_outputStreams.clear();
 }
 
 void WebConnection::close()
 {
-    if (!m_connected && !m_connecting)
-        return;
+    cleanup(true);
+}
 
-    emscripten_websocket_deinitialize();
-    m_websocket = 0;
-
-    if (!m_gameWorld)
-        return;
+void WebConnection::cleanup(const bool sendCloseFrame)
+{
+    const auto socket = std::exchange(m_websocket, 0);
 
     m_connecting = false;
     m_connected = false;
     m_connectCallback = nullptr;
     m_errorCallback = nullptr;
     m_recvCallback = nullptr;
+    m_pendingReadSize = 0;
+    m_deferredError.clear();
+    m_remoteErrorPending = false;
+    m_sendCloseFrameOnError = true;
 
-    m_inputStream.consume(m_inputStream.size());
+    if (m_readTimeoutEvent) {
+        m_readTimeoutEvent->cancel();
+        m_readTimeoutEvent = nullptr;
+    }
 
-    //Workaround for the abrupt termination of the websocket
-    g_dispatcher.addEvent([] {
-        g_game.forceLogout();
-    });
+    m_readCompletionPending = false;
+    ++m_readCompletionGeneration;
+
+    const auto inputSize = m_inputStream.size();
+    m_inputStream.consume(inputSize);
+    releaseBufferedBytes(inputSize);
+    if (m_outputStream) {
+        onWrite(m_outputStream);
+        m_outputStream = nullptr;
+    }
+
+    if (socket < 1)
+        return;
+
+    emscripten_websocket_set_onopen_callback(socket, nullptr, nullptr);
+    emscripten_websocket_set_onerror_callback(socket, nullptr, nullptr);
+    emscripten_websocket_set_onclose_callback(socket, nullptr, nullptr);
+    emscripten_websocket_set_onmessage_callback(socket, nullptr, nullptr);
+    if (sendCloseFrame)
+        emscripten_websocket_close(socket, 1000, "client close");
+    emscripten_websocket_delete(socket);
 }
 
-void WebConnection::connect(const std::string_view host, uint16_t /*port*/, const std::function<void()>& connectCallback, bool gameWorld)
+void WebConnection::connect(const std::string_view host, uint16_t /*port*/, const std::function<void()>& connectCallback, bool /*gameWorld*/)
 {
-    m_gameWorld = gameWorld;
+    if (m_connected || m_connecting || m_websocket > 0) {
+        notifyError(asio::error::already_connected);
+        return;
+    }
 
     m_connected = false;
     m_connecting = true;
@@ -92,15 +113,9 @@ void WebConnection::connect(const std::string_view host, uint16_t /*port*/, cons
     const std::string url(host);
     if (!url.starts_with("ws://") && !url.starts_with("wss://")) {
         g_logger.error("Browser connections require an explicit ws:// or wss:// endpoint");
-        const auto errorCallback = std::move(m_errorCallback);
-        m_connecting = false;
-        m_connectCallback = nullptr;
-        if (errorCallback)
-            errorCallback(asio::error::invalid_argument);
+        notifyError(asio::error::invalid_argument);
         return;
     }
-
-    m_pthread = pthread_self();
 
     EmscriptenWebSocketCreateAttributes attributes =
     {
@@ -112,69 +127,176 @@ void WebConnection::connect(const std::string_view host, uint16_t /*port*/, cons
     m_websocket = emscripten_websocket_new(&attributes);
 
     if (m_websocket < 1) {
-        const auto errorCallback = std::move(m_errorCallback);
-        m_connecting = false;
-        m_connectCallback = nullptr;
-        m_websocket = 0;
-        if (errorCallback)
-            errorCallback(asio::error::network_unreachable);
+        notifyError(asio::error::network_unreachable);
         return;
     }
 
-    emscripten_websocket_set_onopen_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketOpenEvent* /*event*/, void* userData) -> EM_BOOL {
-        WebConnection* webConnection = static_cast<WebConnection*>(userData);
-        webConnection->m_connected = true;
-
-        if (webConnection->m_connectCallback) {
-            emscripten_dispatch_to_thread(webConnection->m_pthread, EM_FUNC_SIG_VI, reinterpret_cast<void*>(runOnConnectCallback), nullptr, &webConnection->m_connectCallback);
-        }
-
-        webConnection->m_connecting = false;
-
+    emscripten_websocket_set_onopen_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketOpenEvent* event, void* userData) -> EM_BOOL {
+        if (!event)
+            return EM_TRUE;
+        const auto connection = static_cast<WebConnection*>(userData)->asWebConnection();
+        const auto socket = event->socket;
+        g_dispatcher.addEvent([connection, socket] { connection->handleOpen(socket); });
         return EM_TRUE;
     }));
 
-    emscripten_websocket_set_onerror_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketErrorEvent* /*event*/, void* userData) -> EM_BOOL {
-        WebConnection* webConnection = static_cast<WebConnection*>(userData);
-        if (webConnection->m_errorCallback) {
-            emscripten_dispatch_to_thread(webConnection->m_pthread, EM_FUNC_SIG_VI, reinterpret_cast<void*>(runOnErrorCallback), nullptr, &webConnection->m_errorCallback);
-        }
-        if (webConnection->m_connected || webConnection->m_connecting) {
-            webConnection->close();
-        }
+    emscripten_websocket_set_onerror_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketErrorEvent* event, void* userData) -> EM_BOOL {
+        if (!event)
+            return EM_TRUE;
+        const auto connection = static_cast<WebConnection*>(userData)->asWebConnection();
+        const auto socket = event->socket;
+        g_dispatcher.addEvent([connection, socket] {
+            connection->handleRemoteError(socket, asio::error::connection_reset, true);
+        });
         return EM_TRUE;
     }));
 
-    emscripten_websocket_set_onclose_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketCloseEvent* /*event*/, void* userData) -> EM_BOOL {
-        WebConnection* webConnection = static_cast<WebConnection*>(userData);
-        webConnection->close();
+    emscripten_websocket_set_onclose_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketCloseEvent* event, void* userData) -> EM_BOOL {
+        if (!event)
+            return EM_TRUE;
+        const auto connection = static_cast<WebConnection*>(userData)->asWebConnection();
+        const auto socket = event->socket;
+        g_dispatcher.addEvent([connection, socket] {
+            connection->handleRemoteError(socket, asio::error::connection_reset, false);
+        });
         return EM_TRUE;
     }));
 
     emscripten_websocket_set_onmessage_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketMessageEvent* webSocketEvent, void* userData) -> EM_BOOL {
-        auto numBytes = webSocketEvent->numBytes;
-        if (numBytes == 0)
-            return EM_TRUE;
-        if (webSocketEvent->isText)
+        if (!webSocketEvent)
             return EM_TRUE;
 
-        uint8_t* const data = webSocketEvent->data;
-        auto webConnection = static_cast<WebConnection*>(userData);
+        auto connection = static_cast<WebConnection*>(userData)->asWebConnection();
+        const auto socket = webSocketEvent->socket;
+        const size_t payloadSize = webSocketEvent->numBytes;
+        if (!connection->reserveBufferedBytes(payloadSize)) {
+            g_dispatcher.addEvent([connection, socket] {
+                if (connection->m_websocket == socket)
+                    connection->notifyError(asio::error::no_buffer_space);
+            });
+            return EM_TRUE;
+        }
 
-        std::ostream os(&webConnection->m_inputStream);
-        os.write((const char*)data, numBytes);
-        os.flush();
-
+        std::vector<uint8_t> payload;
+        if (webSocketEvent->data && payloadSize > 0) {
+            payload.assign(webSocketEvent->data, webSocketEvent->data + payloadSize);
+        }
+        const bool isText = webSocketEvent->isText;
+        g_dispatcher.addEvent([connection, socket, payload = std::move(payload), payloadSize, isText]() mutable {
+            connection->handleMessage(socket, std::move(payload), payloadSize, isText);
+        });
         return EM_TRUE;
     }));
 }
 
+void WebConnection::handleOpen(const EMSCRIPTEN_WEBSOCKET_T socket)
+{
+    if (!m_connecting || m_websocket != socket)
+        return;
+
+    m_connected = true;
+    m_connecting = false;
+    m_activityTimer.restart();
+
+    const auto callback = std::move(m_connectCallback);
+    if (callback)
+        callback();
+}
+
+void WebConnection::handleMessage(const EMSCRIPTEN_WEBSOCKET_T socket, std::vector<uint8_t> payload, const size_t reservedSize, const bool isText)
+{
+    if (!m_connected || m_websocket != socket) {
+        releaseBufferedBytes(reservedSize);
+        return;
+    }
+
+    if (isText) {
+        releaseBufferedBytes(reservedSize);
+        notifyError(asio::error::operation_not_supported);
+        return;
+    }
+
+    if (payload.size() != reservedSize) {
+        releaseBufferedBytes(reservedSize);
+        notifyError(asio::error::connection_reset);
+        return;
+    }
+
+    if (payload.empty()) {
+        releaseBufferedBytes(reservedSize);
+        return;
+    }
+
+    std::ostream stream(&m_inputStream);
+    stream.write(reinterpret_cast<const char*>(payload.data()), payload.size());
+    stream.flush();
+    scheduleReadCompletion();
+}
+
+void WebConnection::handleRemoteError(const EMSCRIPTEN_WEBSOCKET_T socket, const std::error_code& error, const bool sendCloseFrame)
+{
+    if (m_websocket != socket)
+        return;
+
+    m_remoteErrorPending = true;
+    m_deferredError = error;
+    m_sendCloseFrameOnError = m_sendCloseFrameOnError && sendCloseFrame;
+    finishDeferredError();
+}
+
+void WebConnection::finishDeferredError()
+{
+    if (!m_remoteErrorPending || m_readCompletionPending)
+        return;
+
+    if (m_recvCallback && m_inputStream.size() >= m_pendingReadSize) {
+        scheduleReadCompletion();
+        return;
+    }
+
+    notifyError(m_deferredError, m_sendCloseFrameOnError);
+}
+
+bool WebConnection::reserveBufferedBytes(const size_t size)
+{
+    if (size > MAX_BUFFERED_BYTES)
+        return false;
+
+    size_t buffered = m_bufferedBytes.load(std::memory_order_relaxed);
+    do {
+        if (buffered > MAX_BUFFERED_BYTES - size)
+            return false;
+    } while (!m_bufferedBytes.compare_exchange_weak(buffered, buffered + size, std::memory_order_acq_rel));
+    return true;
+}
+
+void WebConnection::releaseBufferedBytes(const size_t size)
+{
+    if (size > 0)
+        m_bufferedBytes.fetch_sub(size, std::memory_order_acq_rel);
+}
+
+void WebConnection::notifyError(const std::error_code& error, const bool sendCloseFrame)
+{
+    if (!m_connected && !m_connecting && m_websocket < 1)
+        return;
+
+    const auto self = asWebConnection();
+    const auto callback = std::move(m_errorCallback);
+    cleanup(sendCloseFrame);
+    if (callback)
+        callback(error);
+    (void)self;
+}
+
 bool WebConnection::sendPacket(uint8_t* buffer, uint16_t size)
 {
-    if (m_websocket < 1) {
-        close();
+    if (m_websocket < 1)
         return false;
-    }
+
+    unsigned short readyState = 0;
+    if (emscripten_websocket_get_ready_state(m_websocket, &readyState) != EMSCRIPTEN_RESULT_SUCCESS || readyState != 1)
+        return false;
 
     const EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(m_websocket, buffer, size);
     return (result == EMSCRIPTEN_RESULT_SUCCESS);
@@ -209,46 +331,37 @@ void WebConnection::internal_write()
     m_outputStream = nullptr;
 
     const auto* data = asio::buffer_cast<const uint8_t*>(outputStream->data());
-    bool write = sendPacket((uint8_t*)data, outputStream->size());
-    if (write) {
-        onWrite(outputStream);
+    const bool written = sendPacket((uint8_t*)data, outputStream->size());
+    onWrite(outputStream);
+    if (!written) {
+        notifyError(asio::error::connection_reset);
     }
 }
 
-void WebConnection::read(const uint16_t size, const RecvCallback& callback, int tries)
+void WebConnection::read(const uint16_t size, const RecvCallback& callback)
 {
     if (!m_connected)
         return;
 
+    if (m_recvCallback) {
+        notifyError(asio::error::operation_not_supported);
+        return;
+    }
+
+    m_pendingReadSize = size;
     m_recvCallback = callback;
+    scheduleReadCompletion();
 
-    if (tries > 1000) {
-        onTimeout();
+    if (m_readCompletionPending)
         return;
-    }
 
-    auto retry = [capture0 = asWebConnection(), size, callback, tries] { capture0->read(size, callback, tries + 1); };
-
-    if (tries == 0) {
-        g_dispatcher.addEvent(std::move(retry));
-        return;
-    }
-
-    if (m_inputStream.size() < size) {
-        emscripten_thread_sleep(10);
-        g_dispatcher.addEvent(std::move(retry));
-        return;
-    }
-
-    onRecv(size);
-}
-
-void WebConnection::runOnConnectCallback(std::function<void()> callback) {
-    callback();
-}
-
-void WebConnection::runOnErrorCallback(ErrorCallback callback) {
-    callback(asio::error::timed_out);
+    const std::weak_ptr<WebConnection> weakConnection = asWebConnection();
+    m_readTimeoutEvent = g_dispatcher.scheduleEvent([weakConnection] {
+        if (const auto connection = weakConnection.lock(); connection && connection->m_recvCallback) {
+            connection->m_readTimeoutEvent = nullptr;
+            connection->notifyError(asio::error::timed_out);
+        }
+    }, READ_TIMEOUT * 1000);
 }
 
 void WebConnection::onWrite(const std::shared_ptr<asio::streambuf>& outputStream)
@@ -258,26 +371,50 @@ void WebConnection::onWrite(const std::shared_ptr<asio::streambuf>& outputStream
     m_outputStreams.emplace_back(outputStream);
 }
 
-void WebConnection::onRecv(const uint16_t recvSize)
+void WebConnection::scheduleReadCompletion()
 {
-    m_activityTimer.restart();
+    if (m_readCompletionPending || !m_recvCallback || m_inputStream.size() < m_pendingReadSize)
+        return;
 
-    if (m_connected) {
-        if (m_recvCallback) {
-            const auto* header = asio::buffer_cast<const char*>(m_inputStream.data());
-            m_recvCallback((uint8_t*)header, recvSize);
-        }
+    if (m_readTimeoutEvent) {
+        m_readTimeoutEvent->cancel();
+        m_readTimeoutEvent = nullptr;
     }
-    m_inputStream.consume(recvSize);
+
+    const std::weak_ptr<WebConnection> weakConnection = asWebConnection();
+    m_readCompletionPending = true;
+    const uint64_t generation = ++m_readCompletionGeneration;
+    g_dispatcher.deferEvent([weakConnection, generation] {
+        if (const auto connection = weakConnection.lock(); connection && connection->m_readCompletionPending &&
+            connection->m_readCompletionGeneration == generation) {
+            connection->m_readCompletionPending = false;
+            connection->tryCompleteRead();
+        }
+    });
 }
 
-void WebConnection::onTimeout()
+void WebConnection::tryCompleteRead()
 {
-    if (m_errorCallback)
-        m_errorCallback(asio::error::timed_out);
+    if (!m_recvCallback || m_inputStream.size() < m_pendingReadSize)
+        return;
 
-    if (m_connected || m_connecting)
-        close();
+    if (m_readTimeoutEvent) {
+        m_readTimeoutEvent->cancel();
+        m_readTimeoutEvent = nullptr;
+    }
+
+    const uint16_t readSize = m_pendingReadSize;
+    m_pendingReadSize = 0;
+    const auto callback = std::exchange(m_recvCallback, nullptr);
+    std::vector<uint8_t> data(readSize);
+    std::istream stream(&m_inputStream);
+    stream.read(reinterpret_cast<char*>(data.data()), readSize);
+    releaseBufferedBytes(readSize);
+    m_activityTimer.restart();
+    callback(data.data(), readSize);
+
+    if (m_remoteErrorPending && m_websocket > 0)
+        finishDeferredError();
 }
 
 int WebConnection::getIp()

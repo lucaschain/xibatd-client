@@ -21,8 +21,12 @@ Current implementation status:
 
 - Phase 0 is complete and recorded in `docs/building/browser-baseline.md`.
 - Phase 1 client endpoint configuration is implemented.
-- The server WebSocket transport and end-to-end WSS gameplay validation remain
-  pending in the server codebase.
+- Phase 2 client-side `WebConnection` hardening is implemented and passes the
+  pinned browser build, Chromium startup smoke test, and clean-close login
+  response regression test.
+- The additive server WebSocket transport is implemented. Local Chromium login
+  and gameplay are validated over `ws://127.0.0.1:7173`; production TLS/WSS
+  deployment and Firefox validation remain pending.
 
 ## Goals
 
@@ -233,6 +237,15 @@ Exit criteria:
 
 Refactor `src/framework/net/webconnection.*` while preserving the `Protocol`
 byte-stream API.
+
+Client implementation status: complete. WebSocket events are copied and
+serialized through the dispatcher, stale socket events are ignored, pending
+reads complete asynchronously without polling, receive bytes are bounded to
+256 KiB across queued and buffered data, and cleanup closes only the current
+socket while delivering at most one error callback. The forced game logout
+workaround was removed. The Emscripten 6.0.8 Docker build and Chromium startup
+smoke test passed on 2026-08-31. Live login and world lifecycle validation over
+the local server WebSocket transport passed on 2026-09-01.
 
 Required fixes:
 
