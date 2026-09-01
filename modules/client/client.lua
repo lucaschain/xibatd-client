@@ -1,30 +1,8 @@
-local musicFilename = 'sounds/startup'
-local musicChannel = nil
-if g_sounds then
-    musicChannel = g_sounds.getChannel(SoundChannels.Music)
-end
-
-function setMusic(filename)
-    musicFilename = filename
-
-    if not g_game.isOnline() then
-        musicChannel:stop()
-        musicChannel:enqueue(musicFilename, 3)
-    end
-end
-
 function startup()
-    if musicChannel then
-        musicChannel:enqueue(musicFilename, 3)
-        connect(g_game, {
-            onGameStart = function()
-                musicChannel:stop(3)
-            end
-        })
+    if g_sounds then
         connect(g_game, {
             onGameEnd = function()
                 g_sounds.stopAll()
-                musicChannel:enqueue(musicFilename, 3)
             end
         })
     end
@@ -62,10 +40,6 @@ function init()
         connect(g_app, {
             onRun = startup,
         })
-    end
-
-    if musicChannel then
-        g_sounds.preload(musicFilename)
     end
 end
 

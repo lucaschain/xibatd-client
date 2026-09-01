@@ -1,4 +1,5 @@
 local options = dofile("data_options")
+local settingsSaveEvent
 panels = {
     generalPanel = nil,
     graphicsPanel = nil,
@@ -378,6 +379,10 @@ end
 
 function controller:onTerminate()
     -- Make sure all settings are saved before terminating
+    if settingsSaveEvent then
+        removeEvent(settingsSaveEvent)
+        settingsSaveEvent = nil
+    end
     g_settings.save()
     
     -- Disconnect from app exit
@@ -459,6 +464,13 @@ function setOption(key, value, force)
 
     option.value = value
     g_settings.set(key, value)
+    if settingsSaveEvent then
+        removeEvent(settingsSaveEvent)
+    end
+    settingsSaveEvent = scheduleEvent(function()
+        settingsSaveEvent = nil
+        g_settings.save()
+    end, 250)
 end
 
 function setupOptionsMainButton()
@@ -490,6 +502,10 @@ end
 
 function hide()
     -- Save all settings when closing the options window
+    if settingsSaveEvent then
+        removeEvent(settingsSaveEvent)
+        settingsSaveEvent = nil
+    end
     g_settings.save()
     controller.ui:hide()
     if extraWidgets.optionsButton then

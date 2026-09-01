@@ -135,7 +135,38 @@ void GraphicalApplication::terminate()
 void GraphicalApplication::mainLoop() {
     if (m_stopping) {
         emscripten_cancel_main_loop();
-        MAIN_THREAD_EM_ASM({ window.location.reload(); });
+        MAIN_THREAD_EM_ASM({
+            let finished = false;
+            const reload = (error) => {
+                if (finished)
+                    return;
+                finished = true;
+                if (error)
+                    console.error('Failed to persist browser settings:', error);
+                window.location.reload();
+            };
+            const timeout = setTimeout(() => reload('storage sync timed out'), 5000);
+            const persistSettings = () => {
+                if (finished)
+                    return;
+                try {
+                    const mount = FS.lookupPath('/user').node.mount;
+                    if (mount.idbPersistState) {
+                        setTimeout(persistSettings, 10);
+                        return;
+                    }
+
+                    FS.syncfs(false, (error) => {
+                        clearTimeout(timeout);
+                        reload(error);
+                    });
+                } catch (error) {
+                    clearTimeout(timeout);
+                    reload(error);
+                }
+            };
+            persistSettings();
+        });
         return;
     }
     mainPoll();
