@@ -79,9 +79,6 @@ jobs:
       contents: read
     outputs:
       compile: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 'true' || steps.filter.outputs.compile }}
-      macos: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 'true' || steps.filter.outputs.macos }}
-      android: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 'true' || steps.filter.outputs.android }}
-      docker: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 'true' || steps.filter.outputs.docker }}
       browser: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 'true' || steps.filter.outputs.browser }}
     steps:
       - name: Checkout repository
@@ -107,49 +104,9 @@ jobs:
               - "CMakePresets.json"
               - ".yamllint.yaml"
               - ".reviewdog.yml"
-              - ".github/workflows/ci.yml"
-              - ".github/workflows/reusable-build-linux.yml"
               - ".github/workflows/reusable-build-windows.yml"
               - ".github/workflows/reusable-checks.yml"
               - ".github/workflows/reusable-tests-lua.yml"
-              - ".github/workflows/update_vcpkg_baseline.yml"
-            macos:
-              - "src/**"
-              - "cmake/**"
-              - "vcpkg.json"
-              - "vcpkg-configuration.json"
-              - "overlay-ports/**"
-              - "CMakeLists.txt"
-              - "CMakePresets.json"
-              - ".github/workflows/ci.yml"
-              - ".github/workflows/reusable-build-macos.yml"
-              - ".github/workflows/update_vcpkg_baseline.yml"
-            android:
-              - "src/**"
-              - "android/**"
-              - "cmake/**"
-              - "CMakeLists.txt"
-              - "vcpkg.json"
-              - "vcpkg-configuration.json"
-              - "overlay-ports/**"
-              - "build_luajit_android.sh"
-              - "setup_android_deps.sh"
-              - ".github/workflows/ci.yml"
-              - ".github/workflows/reusable-build-android-apk.yml"
-              - ".github/workflows/update_vcpkg_baseline.yml"
-            docker:
-              - "Dockerfile"
-              - ".dockerignore"
-              - "src/**"
-              - "cmake/**"
-              - "vcpkg.json"
-              - "vcpkg-configuration.json"
-              - "overlay-ports/**"
-              - "CMakeLists.txt"
-              - "CMakePresets.json"
-              - ".yamllint.yaml"
-              - ".github/workflows/ci.yml"
-              - ".github/workflows/reusable-build-docker.yml"
               - ".github/workflows/update_vcpkg_baseline.yml"
             browser:
               - "Dockerfile.browser"
@@ -162,7 +119,6 @@ jobs:
               - "overlay-ports/**"
               - "CMakeLists.txt"
               - ".yamllint.yaml"
-              - ".github/workflows/ci.yml"
               - ".github/workflows/reusable-build-browser.yml"
               - ".github/workflows/update_vcpkg_baseline.yml"
 
@@ -184,16 +140,6 @@ jobs:
     uses: ./.github/workflows/reusable-tests-lua.yml
     secrets: inherit
 
-  build-linux:
-    name: Build - Linux
-    needs: [changes, checks, tests-lua]
-    if: needs.changes.outputs.compile == 'true' && needs.checks.result == 'success' && needs.tests-lua.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
-    permissions:
-      contents: read
-      packages: read
-    uses: ./.github/workflows/reusable-build-linux.yml
-    secrets: inherit
-
   build-windows:
     name: Build - Windows
     needs: [changes, checks, tests-lua]
@@ -202,39 +148,6 @@ jobs:
       contents: read
       packages: read
     uses: ./.github/workflows/reusable-build-windows.yml
-    secrets: inherit
-
-  build-macos:
-    name: Build - macOS
-    needs: [changes, checks, tests-lua]
-    if: needs.changes.outputs.macos == 'true' && needs.checks.result == 'success' && needs.tests-lua.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
-    permissions:
-      contents: read
-      pull-requests: read
-    uses: ./.github/workflows/reusable-build-macos.yml
-    secrets: inherit
-
-  build-android-apk:
-    name: Build - Android APK
-    needs: [changes, checks, tests-lua]
-    if: needs.changes.outputs.android == 'true' && needs.checks.result == 'success' && needs.tests-lua.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
-    permissions:
-      contents: read
-      pull-requests: read
-    uses: ./.github/workflows/reusable-build-android-apk.yml
-    secrets: inherit
-
-  build-docker:
-    name: Build - Docker
-    needs: [changes, checks, tests-lua]
-    if: needs.changes.outputs.docker == 'true' && needs.checks.result == 'success' && needs.tests-lua.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/reusable-build-docker.yml
-    with:
-      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      vcpkg_binary_cache_access: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'readwrite' || 'read' }}
     secrets: inherit
 
   build-browser:
