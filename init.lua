@@ -19,7 +19,8 @@ Services = {
         preferArchive = true,
         fallbackToArchiveOnManifestFailure = false,
         installArchiveExtras = false,
-        installPackagedFiles = false
+        installPackagedFiles = false,
+        installInWorkDir = not g_platform.isBrowser()
     }, -- ./client_assets
 }
 
@@ -67,7 +68,10 @@ if ENABLE_SERVERS then
             protocol = 1098,
             httpLogin = false,
             useAuthenticator = false,
-            -- Browser builds remain unsupported until production has a WSS gateway.
+            browserWebSocket = {
+                login = "wss://play.xibatd.online/login",
+                world = "wss://play.xibatd.online/world/{worldName}"
+            }
         }
     }
 end

@@ -49,6 +49,12 @@ select **Start**.
 The helper adds the required cross-origin isolation headers. Production hosting
 must provide equivalent headers over HTTPS.
 
+The Xibat production bundle is served at `https://play.xibatd.online/`. Browser
+releases are published to GCS and selected by the production VM through an
+immutable, SHA-256-verified deployment manifest. Downloaded client assets are
+installed under the browser's persistent `/user` filesystem rather than the
+read-only packaged work directory.
+
 ## Configure WebSockets
 
 Browser builds require explicit login and world WebSocket endpoints in the
