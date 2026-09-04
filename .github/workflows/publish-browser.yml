@@ -1,6 +1,27 @@
 name: Publish browser client
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Dockerfile.browser"
+      - "Dockerfile.browser.sh"
+      - "browser/**"
+      - "data/**"
+      - "mods/**"
+      - "modules/**"
+      - "src/**"
+      - "cmake/**"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+      - "overlay-ports/**"
+      - "CMakeLists.txt"
+      - "init.lua"
+      - "otclientrc.lua"
+      - ".github/workflows/reusable-build-browser.yml"
+      - ".github/workflows/reusable-tests-lua.yml"
+      - ".github/workflows/publish-browser.yml"
   workflow_dispatch:
 
 permissions:
