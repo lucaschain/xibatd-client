@@ -22,6 +22,7 @@
 
 #include "protocolhttp.h"
 
+#include "framework/core/asyncdispatcher.h"
 #include "framework/core/eventdispatcher.h"
 #include "framework/util/crypt.h"
 
@@ -260,18 +261,26 @@ void Http::completeFetch(FetchContext* rawContext, emscripten_fetch_t* fetch, st
         emscripten_fetch_close(fetch);
 }
 
-void Http::onFetchSuccess(emscripten_fetch_t* fetch)
+void Http::dispatchFetch(std::unique_ptr<FetchContext> context, const std::string& url, const int timeout)
 {
-    auto* context = fetch ? static_cast<FetchContext*>(fetch->userData) : nullptr;
-    if (context)
-        context->http->completeFetch(context, fetch, {});
-}
+    auto* rawContext = context.release();
+    g_asyncDispatcher->detach_task([rawContext, url, timeout] {
+        emscripten_fetch_attr_t attr;
+        emscripten_fetch_attr_init(&attr);
+        std::strcpy(attr.requestMethod, rawContext->kind == FetchKind::Post ? "POST" : "GET");
+        attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE | EMSCRIPTEN_FETCH_SYNCHRONOUS;
+        attr.timeoutMSecs = timeout * 1000;
+        attr.requestHeaders = rawContext->headerPointers.data();
+        if (rawContext->kind == FetchKind::Post) {
+            attr.requestData = rawContext->body.data();
+            attr.requestDataSize = rawContext->body.size();
+        }
+        attr.userData = rawContext;
+        attr.onprogress = &Http::onFetchProgress;
 
-void Http::onFetchError(emscripten_fetch_t* fetch)
-{
-    auto* context = fetch ? static_cast<FetchContext*>(fetch->userData) : nullptr;
-    if (context)
-        context->http->completeFetch(context, fetch, {});
+        auto* fetch = emscripten_fetch(&attr, url.c_str());
+        rawContext->http->completeFetch(rawContext, fetch, fetch ? std::string{} : "http_error::queue");
+    });
 }
 
 int Http::get(const std::string& url, int timeout)
@@ -302,22 +311,7 @@ int Http::get(const std::string& url, int timeout)
         context->headerPointers.push_back(header.c_str());
     context->headerPointers.push_back(nullptr);
 
-    emscripten_fetch_attr_t attr;
-    emscripten_fetch_attr_init(&attr);
-    std::strcpy(attr.requestMethod, "GET");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
-    attr.timeoutMSecs = timeout * 1000;
-    attr.requestHeaders = context->headerPointers.data();
-    attr.userData = context.get();
-    attr.onsuccess = &Http::onFetchSuccess;
-    attr.onerror = &Http::onFetchError;
-    attr.onprogress = &Http::onFetchProgress;
-
-    if (!emscripten_fetch(&attr, url.c_str())) {
-        completeFetch(context.release(), nullptr, "http_error::queue");
-    } else {
-        context.release();
-    }
+    dispatchFetch(std::move(context), url, timeout);
 
     return operationId;
 }
@@ -359,24 +353,7 @@ int Http::post(const std::string& url, const std::string& data, int timeout, boo
         context->headerPointers.push_back(header.c_str());
     context->headerPointers.push_back(nullptr);
 
-    emscripten_fetch_attr_t attr;
-    emscripten_fetch_attr_init(&attr);
-    std::strcpy(attr.requestMethod, "POST");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
-    attr.timeoutMSecs = timeout * 1000;
-    attr.requestHeaders = context->headerPointers.data();
-    attr.requestData = context->body.data();
-    attr.requestDataSize = context->body.size();
-    attr.userData = context.get();
-    attr.onsuccess = &Http::onFetchSuccess;
-    attr.onerror = &Http::onFetchError;
-    attr.onprogress = &Http::onFetchProgress;
-
-    if (!emscripten_fetch(&attr, url.c_str())) {
-        completeFetch(context.release(), nullptr, "http_error::queue");
-    } else {
-        context.release();
-    }
+    dispatchFetch(std::move(context), url, timeout);
 
     return operationId;
 }
@@ -410,22 +387,7 @@ int Http::download(const std::string& url, const std::string& path, int timeout)
         context->headerPointers.push_back(header.c_str());
     context->headerPointers.push_back(nullptr);
 
-    emscripten_fetch_attr_t attr;
-    emscripten_fetch_attr_init(&attr);
-    std::strcpy(attr.requestMethod, "GET");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
-    attr.timeoutMSecs = timeout * 1000;
-    attr.requestHeaders = context->headerPointers.data();
-    attr.userData = context.get();
-    attr.onsuccess = &Http::onFetchSuccess;
-    attr.onerror = &Http::onFetchError;
-    attr.onprogress = &Http::onFetchProgress;
-
-    if (!emscripten_fetch(&attr, url.c_str())) {
-        completeFetch(context.release(), nullptr, "http_error::queue");
-    } else {
-        context.release();
-    }
+    dispatchFetch(std::move(context), url, timeout);
 
     return operationId;
 }

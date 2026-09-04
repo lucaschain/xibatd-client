@@ -104,8 +104,6 @@ private:
     struct FetchContext;
     struct WebSocketContext;
 
-    static void onFetchSuccess(emscripten_fetch_t* fetch);
-    static void onFetchError(emscripten_fetch_t* fetch);
     static void onFetchProgress(emscripten_fetch_t* fetch);
     static EM_BOOL onWebSocketOpen(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData);
     static EM_BOOL onWebSocketMessage(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData);
@@ -113,6 +111,7 @@ private:
     static EM_BOOL onWebSocketClose(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData);
 
     void completeFetch(FetchContext* context, emscripten_fetch_t* fetch, std::string error);
+    void dispatchFetch(std::unique_ptr<FetchContext> context, const std::string& url, int timeout);
     void cleanupWebSocket(WebSocketContext* context, const std::string& closeMessage, bool dispatchClose);
 #else
     std::string describeHttpError(const ix::HttpResponsePtr& response, bool canceled);
