@@ -7,9 +7,6 @@ on:
         description: Semantic client version, for example 0.1.0.
         required: true
         type: string
-  push:
-    tags:
-      - "client-v*"
 
 permissions:
   contents: read
@@ -60,11 +57,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -Eeuo pipefail
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            version="${GITHUB_REF_NAME#client-v}"
-          else
-            version="$INPUT_VERSION"
-          fi
+          version="$INPUT_VERSION"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
           short_sha="${GITHUB_SHA:0:12}"
           archive="xibatd-client-windows-x64-$version-$short_sha.zip"
