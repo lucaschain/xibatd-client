@@ -146,26 +146,10 @@ void GraphicalApplication::mainLoop() {
                 window.location.reload();
             };
             const timeout = setTimeout(() => reload('storage sync timed out'), 5000);
-            const persistSettings = () => {
-                if (finished)
-                    return;
-                try {
-                    const mount = FS.lookupPath('/user').node.mount;
-                    if (mount.idbPersistState) {
-                        setTimeout(persistSettings, 10);
-                        return;
-                    }
-
-                    FS.syncfs(false, (error) => {
-                        clearTimeout(timeout);
-                        reload(error);
-                    });
-                } catch (error) {
-                    clearTimeout(timeout);
-                    reload(error);
-                }
-            };
-            persistSettings();
+            Module.requestPersistentStorageSync((error) => {
+                clearTimeout(timeout);
+                reload(error);
+            });
         });
         return;
     }

@@ -54,8 +54,13 @@ public:
 
     // @dontbind
     ConfigPtr asConfig() { return static_self_cast<Config>(); }
+    // @dontbind
+    void setChangeCallback(std::function<void()> callback) { m_changeCallback = std::move(callback); }
 
 private:
+    void notifyChanged();
+
     std::string m_fileName;
     OTMLDocumentPtr m_confsDoc;
+    std::function<void()> m_changeCallback;
 };

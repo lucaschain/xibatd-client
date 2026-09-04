@@ -22,12 +22,20 @@
 
 #include "configmanager.h"
 #include <INIReader.h>
+#include "eventdispatcher.h"
 #include "resourcemanager.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
 
 ConfigManager g_configs;
 
 void ConfigManager::init() {
     m_settings = std::make_shared<Config>();
+#ifdef __EMSCRIPTEN__
+    m_settings->setChangeCallback([this] { scheduleSettingsSave(); });
+#endif
 
     // Comment out or remove this line to skip loading config.ini.
     loadPublicConfig("config.ini");
@@ -35,6 +43,11 @@ void ConfigManager::init() {
 
 void ConfigManager::terminate()
 {
+    if (m_settingsSaveEvent) {
+        m_settingsSaveEvent->cancel();
+        m_settingsSaveEvent = nullptr;
+    }
+
     if (m_settings) {
         // ensure settings are saved
         m_settings->save();
@@ -127,8 +140,31 @@ void ConfigManager::remove(const ConfigPtr& config) { m_configs.remove(config); 
 
 void ConfigManager::saveSettings()
 {
-    if (m_settings)
-        m_settings->save();
+    if (m_settingsSaveEvent) {
+        m_settingsSaveEvent->cancel();
+        m_settingsSaveEvent = nullptr;
+    }
+
+    if (!m_settings || !m_settings->save())
+        return;
+
+#ifdef __EMSCRIPTEN__
+    MAIN_THREAD_ASYNC_EM_ASM({
+        if (Module.requestPersistentStorageSync)
+            Module.requestPersistentStorageSync();
+    });
+#endif
+}
+
+void ConfigManager::scheduleSettingsSave()
+{
+    if (m_settingsSaveEvent)
+        m_settingsSaveEvent->cancel();
+
+    m_settingsSaveEvent = g_dispatcher.scheduleEvent([this] {
+        m_settingsSaveEvent = nullptr;
+        saveSettings();
+    }, 250);
 }
 
 void ConfigManager::loadPublicConfig(const std::string& fileName) {

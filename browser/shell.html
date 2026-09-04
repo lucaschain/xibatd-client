@@ -137,7 +137,51 @@
           ev.stopPropagation();
         });
       }
+      let persistentStorageSyncInFlight = false;
+      let persistentStorageSyncPending = false;
+      let persistentStorageSyncWaiters = [];
+
+      function requestPersistentStorageSync(callback) {
+        if (callback) persistentStorageSyncWaiters.push(callback);
+        persistentStorageSyncPending = true;
+
+        if (persistentStorageSyncInFlight) return;
+        persistentStorageSyncInFlight = true;
+        persistentStorageSyncPending = false;
+
+        const finish = function (error) {
+          persistentStorageSyncInFlight = false;
+          if (persistentStorageSyncPending && !error) {
+            requestPersistentStorageSync();
+            return;
+          }
+
+          persistentStorageSyncPending = false;
+          const waiters = persistentStorageSyncWaiters;
+          persistentStorageSyncWaiters = [];
+          waiters.forEach(function (waiter) {
+            waiter(error);
+          });
+        };
+
+        const sync = function () {
+          try {
+            const mount = FS.lookupPath("/user").node.mount;
+            if (mount.idbPersistState) {
+              setTimeout(sync, 10);
+              return;
+            }
+
+            FS.syncfs(false, finish);
+          } catch (error) {
+            finish(error);
+          }
+        };
+        sync();
+      }
+
       var Module = {
+        requestPersistentStorageSync: requestPersistentStorageSync,
         locateFile: function (path) {
           const baseURL =
             window.location.origin +

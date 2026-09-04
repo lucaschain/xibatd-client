@@ -25,6 +25,7 @@
 
 #include <framework/core/application.h>
 #include "browserwindow.h"
+#include <framework/core/configmanager.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/core/resourcemanager.h>
 #include <framework/util/crypt.h>
@@ -155,6 +156,8 @@ void BrowserWindow::terminate() {
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, nullptr);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, nullptr);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, nullptr);
+    emscripten_set_visibilitychange_callback(this, EM_TRUE, nullptr);
+    emscripten_set_beforeunload_callback(this, nullptr);
     emscripten_set_touchend_callback("#canvas", this, EM_TRUE, nullptr);
     emscripten_set_touchstart_callback("#canvas", this, EM_TRUE, nullptr);
     emscripten_set_touchmove_callback("#canvas", this, EM_TRUE, nullptr);
@@ -230,6 +233,15 @@ void BrowserWindow::poll() {
         emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, ([](int eventType, const EmscriptenFocusEvent* event, void* userData) -> EM_BOOL {
             static_cast<BrowserWindow*>(userData)->handleFocusCallback(eventType, event);
             return EM_TRUE;
+        }));
+        emscripten_set_visibilitychange_callback(this, EM_TRUE, ([](int, const EmscriptenVisibilityChangeEvent* event, void*) -> EM_BOOL {
+            if (event->hidden)
+                g_configs.saveSettings();
+            return EM_FALSE;
+        }));
+        emscripten_set_beforeunload_callback(this, ([](int, const void*, void*) -> const char* {
+            g_configs.saveSettings();
+            return nullptr;
         }));
         emscripten_set_touchend_callback("#canvas", this, EM_TRUE, ([](int eventType, const EmscriptenTouchEvent* event, void* userData) -> EM_BOOL {
             static_cast<BrowserWindow*>(userData)->handleTouchCallback(eventType, event);

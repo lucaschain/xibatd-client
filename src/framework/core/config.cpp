@@ -69,6 +69,7 @@ bool Config::save()
 void Config::clear()
 {
     m_confsDoc->clear();
+    notifyChanged();
 }
 
 void Config::setValue(const std::string& key, const std::string& value)
@@ -80,6 +81,7 @@ void Config::setValue(const std::string& key, const std::string& value)
 
     const auto& child = OTMLNode::create(key, value);
     m_confsDoc->addChild(child);
+    notifyChanged();
 }
 
 void Config::setList(const std::string& key, const std::vector<std::string>& list)
@@ -93,6 +95,7 @@ void Config::setList(const std::string& key, const std::vector<std::string>& lis
     for (const auto& value : list)
         child->writeIn(value);
     m_confsDoc->addChild(child);
+    notifyChanged();
 }
 
 bool Config::exists(const std::string& key)
@@ -120,8 +123,10 @@ std::vector<std::string> Config::getList(const std::string& key)
 void Config::remove(const std::string& key)
 {
     const auto& child = m_confsDoc->get(key);
-    if (child)
+    if (child) {
         m_confsDoc->removeChild(child);
+        notifyChanged();
+    }
 }
 
 void Config::setNode(const std::string& key, const OTMLNodePtr& node)
@@ -136,6 +141,7 @@ void Config::mergeNode(const std::string& key, const OTMLNodePtr& node)
     clone->setTag(key);
     clone->setUnique(true);
     m_confsDoc->addChild(clone);
+    notifyChanged();
 }
 
 OTMLNodePtr Config::getNode(const std::string& key)
@@ -170,4 +176,10 @@ bool Config::isLoaded() const
 std::string Config::getFileName()
 {
     return m_fileName;
+}
+
+void Config::notifyChanged()
+{
+    if (m_changeCallback)
+        m_changeCallback();
 }

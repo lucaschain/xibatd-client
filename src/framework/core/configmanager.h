@@ -72,8 +72,11 @@ protected:
     ConfigPtr m_settings;
 
 private:
+    void scheduleSettingsSave();
+
     std::list<ConfigPtr> m_configs;
     PublicConfig m_publicConfig;
+    ScheduledEventPtr m_settingsSaveEvent;
 };
 
 extern ConfigManager g_configs;
