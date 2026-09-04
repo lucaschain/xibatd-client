@@ -158,7 +158,9 @@ void WebConnection::connect(const std::string_view host, uint16_t /*port*/, cons
         const auto socket = event->socket;
         const auto code = event->code;
         g_dispatcher.addEvent([connection, socket, code] {
-            const std::error_code error = code == 1000 ? asio::error::eof : asio::error::connection_reset;
+            const std::error_code error = code == 1000
+                                              ? asio::error::make_error_code(asio::error::eof)
+                                              : asio::error::make_error_code(asio::error::connection_reset);
             connection->handleRemoteError(socket, error, false);
         });
         return EM_TRUE;
