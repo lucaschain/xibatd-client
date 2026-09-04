@@ -256,7 +256,7 @@ function EnterGame.init()
 
     for _, proto in pairs(g_game.getSupportedClients()) do
         local protoStr = tostring(proto)
-        if installedClients[protoStr] or amountInstalledClients == 0 or (canDownloadAssets and proto >= 1281) then
+        if installedClients[protoStr] or amountInstalledClients == 0 or canDownloadAssets then
             installedClients[protoStr] = nil
             clientBox:addOption(proto)
         end
@@ -842,7 +842,7 @@ function EnterGame.doLogin()
     g_settings.set('port', G.port)
     g_settings.set('client-version', clientVersion)
 
-    if clientVersion >= 1281 and modules.client_assets and modules.client_assets.ensureClientVersion and
+    if modules.client_assets and modules.client_assets.ensureClientVersion and
         (not modules.client_assets.isEnabled or modules.client_assets.isEnabled()) and
         not modules.client_assets.isClientVersionInstalled(clientVersion) then
         modules.client_assets.ensureClientVersion(clientVersion, function(success, message)
@@ -984,12 +984,13 @@ function EnterGame.setUniqueServer(host, port, protocol, windowWidth, windowHeig
     local server = Servers_init[host]
     enterGame.disableToken = not (server and server.useAuthenticator)
 
-    -- preload the assets
-    -- this is for the client_bottommenu module
-    -- it needs images of outfits
-    -- so it can display the boosted creature
-    g_game.setClientVersion(clientVersion)
-    g_game.setProtocolVersion(g_game.getClientProtocolVersion(clientVersion))
+    -- Avoid presenting loader errors before the missing-assets prompt on a clean install.
+    local assetsInstalled = not modules.client_assets or not modules.client_assets.isClientVersionInstalled or
+        modules.client_assets.isClientVersionInstalled(clientVersion)
+    if assetsInstalled then
+        g_game.setClientVersion(clientVersion)
+        g_game.setProtocolVersion(g_game.getClientProtocolVersion(clientVersion))
+    end
 end
 
 function EnterGame.setServerInfo(message)

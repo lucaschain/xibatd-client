@@ -1,0 +1,156 @@
+name: Publish Windows client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic client version, for example 0.1.0.
+        required: true
+        type: string
+  push:
+    tags:
+      - "client-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-windows-client
+  cancel-in-progress: false
+
+env:
+  CLIENT_BUCKET: principal-346712-xibat-client-downloads
+
+jobs:
+  tests:
+    name: Lua tests
+    uses: ./.github/workflows/reusable-tests-lua.yml
+
+  build:
+    needs: tests
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/reusable-build-windows.yml
+    with:
+      release_only: true
+    secrets: inherit
+
+  publish:
+    name: Package and publish
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Download release executable
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-cmake-release
+          path: build/windows-release/bin
+
+      - name: Resolve release metadata
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#client-v}"
+          else
+            version="$INPUT_VERSION"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          short_sha="${GITHUB_SHA:0:12}"
+          archive="xibatd-client-windows-x64-$version-$short_sha.zip"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble portable client
+        env:
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+        run: |
+          set -Eeuo pipefail
+          stage="$RUNNER_TEMP/xibatd-client"
+          install -d "$stage"
+          cp -a data mods modules "$stage/"
+          rm -rf "$stage/data/things/1098"
+          cp build/windows-release/bin/otclient.exe init.lua otclientrc.lua config.ini cacert.pem LICENSE "$stage/"
+          test -s "$stage/otclient.exe"
+          test -s "$stage/init.lua"
+          test ! -e "$stage/data/things/1098/Tibia.dat"
+          test ! -e "$stage/data/things/1098/Tibia.spr"
+          (cd "$RUNNER_TEMP" && zip -9 -r "$ARCHIVE" xibatd-client)
+          (cd "$RUNNER_TEMP" && sha256sum "$ARCHIVE" > "$ARCHIVE.sha256")
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/880168374503/locations/global/workloadIdentityPools/xibat-github/providers/github
+          service_account: xibat-client-publisher@principal-346712.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Publish release
+        env:
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          VERSION: ${{ steps.release.outputs.version }}
+          SHORT_SHA: ${{ steps.release.outputs.short_sha }}
+        run: |
+          set -Eeuo pipefail
+          immutable="gs://$CLIENT_BUCKET/client/windows/$VERSION/$GITHUB_SHA"
+          latest="gs://$CLIENT_BUCKET/client/windows/latest"
+
+          gcloud storage cp --no-clobber --cache-control="public,max-age=31536000,immutable" \
+            "$RUNNER_TEMP/$ARCHIVE" "$immutable/$ARCHIVE"
+          gcloud storage cp --no-clobber --cache-control="public,max-age=31536000,immutable" \
+            "$RUNNER_TEMP/$ARCHIVE.sha256" "$immutable/$ARCHIVE.sha256"
+
+          cp "$RUNNER_TEMP/$ARCHIVE" "$RUNNER_TEMP/xibatd-client-windows-x64.zip"
+          (cd "$RUNNER_TEMP" && sha256sum xibatd-client-windows-x64.zip \
+            > xibatd-client-windows-x64.zip.sha256)
+          jq --null-input \
+            --arg version "$VERSION" \
+            --arg revision "$GITHUB_SHA" \
+            --arg archive "$ARCHIVE" \
+            --arg url "https://storage.googleapis.com/$CLIENT_BUCKET/client/windows/$VERSION/$GITHUB_SHA/$ARCHIVE" \
+            --arg sha256 "$(cut -d' ' -f1 "$RUNNER_TEMP/$ARCHIVE.sha256")" \
+            --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version: $version, revision: $revision, archive: $archive, url: $url, sha256: $sha256, published_at: $published_at}' \
+            > "$RUNNER_TEMP/latest.json"
+
+          gcloud storage cp --cache-control="no-cache,max-age=0" \
+            "$RUNNER_TEMP/xibatd-client-windows-x64.zip" "$latest/xibatd-client-windows-x64.zip"
+          gcloud storage cp --cache-control="no-cache,max-age=0" \
+            "$RUNNER_TEMP/xibatd-client-windows-x64.zip.sha256" "$latest/xibatd-client-windows-x64.zip.sha256"
+          gcloud storage cp --cache-control="no-cache,max-age=0" \
+            "$RUNNER_TEMP/latest.json" "$latest/latest.json"
+
+      - name: Upload packaged client
+        uses: actions/upload-artifact@v7
+        with:
+          name: xibatd-client-windows-x64-${{ steps.release.outputs.version }}-${{ steps.release.outputs.short_sha }}
+          path: |
+            ${{ runner.temp }}/${{ steps.release.outputs.archive }}
+            ${{ runner.temp }}/${{ steps.release.outputs.archive }}.sha256
+          if-no-files-found: error
+
+      - name: Report release
+        env:
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          {
+            echo '### Windows client published'
+            echo "- Version: \`$VERSION\`"
+            echo "- Revision: \`$GITHUB_SHA\`"
+            echo "- Archive: \`$ARCHIVE\`"
+            echo "- Download: https://storage.googleapis.com/$CLIENT_BUCKET/client/windows/latest/xibatd-client-windows-x64.zip"
+          } >> "$GITHUB_STEP_SUMMARY"

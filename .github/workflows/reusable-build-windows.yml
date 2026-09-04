@@ -2,6 +2,12 @@ name: Reusable Windows Build
 
 on:
   workflow_call:
+    inputs:
+      release_only:
+        description: Build only the CMake release executable for distribution.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -13,22 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: CMake Release
-            type: CMake
-            artifact: windows-cmake-release
-          - name: Solution Debug
-            type: Solution
-            configuration: Debug
-            artifact: windows-solution-debug
-          - name: Solution OpenGL
-            type: Solution
-            configuration: OpenGL
-            artifact: windows-solution-opengl
-          - name: Solution DirectX
-            type: Solution
-            configuration: DirectX
-            artifact: windows-solution-directx
+        include: ${{ inputs.release_only && fromJSON('[{"name":"CMake Release","type":"CMake","artifact":"windows-cmake-release"}]') || fromJSON('[{"name":"CMake Release","type":"CMake","artifact":"windows-cmake-release"},{"name":"Solution Debug","type":"Solution","configuration":"Debug","artifact":"windows-solution-debug"},{"name":"Solution OpenGL","type":"Solution","configuration":"OpenGL","artifact":"windows-solution-opengl"},{"name":"Solution DirectX","type":"Solution","configuration":"DirectX","artifact":"windows-solution-directx"}]') }}
     runs-on: windows-2025-vs2026
     env:
       VCPKG_BINARY_CACHE_ACCESS: ${{ secrets.VCPKG_PACKAGES_TOKEN != '' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && 'readwrite' || 'read' }}
@@ -170,11 +161,19 @@ jobs:
           configurePresetAdditionalArgs: "['-DTOGGLE_BIN_FOLDER=ON', '-DOPTIONS_ENABLE_IPO=OFF', '-DOTCLIENT_BUILD_TESTS=OFF']"
 
       - name: Upload artifacts (CMake)
-        if: matrix.type == 'CMake'
+        if: matrix.type == 'CMake' && !inputs.release_only
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: build/windows-release/bin/
+
+      - name: Upload release executable
+        if: matrix.type == 'CMake' && inputs.release_only
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: build/windows-release/bin/otclient.exe
+          if-no-files-found: error
 
       - name: Build project (MSBuild solution)
         if: matrix.type == 'Solution'

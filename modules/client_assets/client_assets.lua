@@ -1545,15 +1545,20 @@ function ensureClientVersion(version, callback)
           return finishDownload(false, installError or 'Unable to install client assets.')
         end
 
-        if not hasModernClientFiles(version) then
-          return finishDownload(false, 'Assets were downloaded but the client files are still incomplete. Missing catalog-content.json, assets.json.sha256, or required catalog files.')
+        if not isClientVersionInstalled(version) then
+          if version >= 1281 then
+            return finishDownload(false, 'Assets were downloaded but the client files are still incomplete. Missing catalog-content.json, assets.json.sha256, or required catalog files.')
+          end
+          return finishDownload(false, string.format('Assets were downloaded but client %s is still missing Tibia.dat or Tibia.spr.', versionLabel(version)))
         end
 
-        local markerPath = completeMarkerPath(version)
-        if not installFileExists(markerPath) then
-          markClientVersionInstalled(config, version)
+        if version >= 1281 then
+          local markerPath = completeMarkerPath(version)
           if not installFileExists(markerPath) then
-            logWarning('Assets were downloaded but the install marker could not be written.')
+            markClientVersionInstalled(config, version)
+            if not installFileExists(markerPath) then
+              logWarning('Assets were downloaded but the install marker could not be written.')
+            end
           end
         end
 

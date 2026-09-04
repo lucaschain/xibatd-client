@@ -9,17 +9,17 @@ Services = {
     --createAccount = "http://localhost/clientcreateaccount.php", --./client_entergame -- createAccount.lua
     --getCoinsUrl = "http://localhost/?subtopic=shop&step=terms", --./game_market
     clientAssets = {
-        enabled = false,
-        repository = "dudantas/tibia-client",
-        installSounds = true,
+        enabled = true,
+        repository = false,
+        manifestUrl = "https://storage.googleapis.com/principal-346712-xibat-client-downloads/assets/manifests/1098-v1.json",
+        installSounds = false,
         strictManifestSha256 = true,
         allowRawFallbackHashMismatch = false,
-        allowMissingPackedRawFallback = true,
+        allowMissingPackedRawFallback = false,
         preferArchive = true,
         fallbackToArchiveOnManifestFailure = false,
-        installArchiveExtras = true,
-        archiveExtraPrefixes = { "bin" },
-        installPackagedFiles = true
+        installArchiveExtras = false,
+        installPackagedFiles = false
     }, -- ./client_assets
 }
 
@@ -62,16 +62,12 @@ if ENABLE_SERVERS then
     -- @table Servers_init
     --
     Servers_init = {
-        ["127.0.0.1"] = {
+        ["game.xibatd.online"] = {
             port = 7171,
             protocol = 1098,
             httpLogin = false,
             useAuthenticator = false,
-            -- Required by browser builds. Use wss:// outside local development.
-            browserWebSocket = {
-                login = "ws://127.0.0.1:7173/login",
-                world = "ws://127.0.0.1:7173/world/{worldId}"
-            }
+            -- Browser builds remain unsupported until production has a WSS gateway.
         }
     }
 end
