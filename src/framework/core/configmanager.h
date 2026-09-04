@@ -27,8 +27,8 @@
 struct GraphicsConfig
 {
     uint16_t maxAtlasSize = 8192;
-    int16_t mapAtlasSize = -1;
-    int16_t foregroundAtlasSize = -1;
+    int16_t  mapAtlasSize = 0;
+    int16_t foregroundAtlasSize = 2048;
 };
 
 struct FontConfig

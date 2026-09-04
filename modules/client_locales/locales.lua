@@ -76,15 +76,7 @@ function init()
         pdebug('Using configured locale: ' .. userLocaleName)
     else
         setLocale(defaultLocaleName)
-        if g_app.hasUpdater() then
-            connect(g_app, {
-                onUpdateFinished = createWindow,
-            })
-        else
-            connect(g_app, {
-                onRun = createWindow,
-            })
-        end
+        pdebug('Using default locale: ' .. defaultLocaleName)
     end
 
     ProtocolGame.registerExtendedOpcode(ExtendedIds.Locale, onExtendedLocales)
@@ -98,15 +90,6 @@ function terminate()
     currentLocale = nil
 
     ProtocolGame.unregisterExtendedOpcode(ExtendedIds.Locale)
-    if g_app.hasUpdater() then
-        disconnect(g_app, {
-            onUpdateFinished = createWindow,
-        })
-    else
-        disconnect(g_app, {
-            onRun = createWindow,
-        })
-    end
     disconnect(g_game, {
         onGameStart = onGameStart
     })
