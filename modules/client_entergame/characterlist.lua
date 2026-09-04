@@ -520,6 +520,14 @@ function onGameConnectionError(message, code)
     end
 end
 
+local function onGameStart()
+    CharacterList.destroyLoadBox()
+    if errorBox then
+        errorBox:destroy()
+        errorBox = nil
+    end
+end
+
 function onGameUpdateNeeded(signature)
     CharacterList.destroyLoadBox()
     errorBox = displayErrorBox(tr('Update needed'), tr('Enter with your account again to update your client.'))
@@ -608,7 +616,7 @@ function CharacterList.init()
         onConnectionError = onGameConnectionError
     })
     connect(g_game, {
-        onGameStart = CharacterList.destroyLoadBox
+        onGameStart = onGameStart
     })
     connect(g_game, {
         onLoginWait = onLoginWait
@@ -639,7 +647,7 @@ function CharacterList.terminate()
         onConnectionError = onGameConnectionError
     })
     disconnect(g_game, {
-        onGameStart = CharacterList.destroyLoadBox
+        onGameStart = onGameStart
     })
     disconnect(g_game, {
         onLoginWait = onLoginWait
