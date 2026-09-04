@@ -12,6 +12,7 @@ Services = {
         enabled = true,
         repository = false,
         manifestUrl = "https://storage.googleapis.com/principal-346712-xibat-client-downloads/assets/manifests/1098-v1.json",
+        timeout = 900,
         installSounds = false,
         strictManifestSha256 = true,
         allowRawFallbackHashMismatch = false,

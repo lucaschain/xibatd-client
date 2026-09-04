@@ -1244,8 +1244,12 @@ local function installFromArchive(config, descriptor, callback)
       extractAssetHashIdentifier()
     end)
   end, function(progress, speed)
-    setDownloadBusy('Downloading files', string.format('Client %s archive', versionLabel(descriptor.version)))
-    logArchiveHeartbeat('Archive download still in progress. GitHub did not provide a reliable total size, so the UI is in indeterminate mode.')
+    if progress and progress > 0 then
+      setDownloadProgress(string.format('Downloading assets for client %s', versionLabel(descriptor.version)), progress)
+    else
+      setDownloadBusy('Downloading files', string.format('Client %s archive', versionLabel(descriptor.version)))
+    end
+    logArchiveHeartbeat('Archive download still in progress.')
   end)
 end
 

@@ -305,7 +305,7 @@ int Http::get(const std::string& url, int timeout)
     emscripten_fetch_attr_t attr;
     emscripten_fetch_attr_init(&attr);
     std::strcpy(attr.requestMethod, "GET");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
     attr.timeoutMSecs = timeout * 1000;
     attr.requestHeaders = context->headerPointers.data();
     attr.userData = context.get();
@@ -362,7 +362,7 @@ int Http::post(const std::string& url, const std::string& data, int timeout, boo
     emscripten_fetch_attr_t attr;
     emscripten_fetch_attr_init(&attr);
     std::strcpy(attr.requestMethod, "POST");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
     attr.timeoutMSecs = timeout * 1000;
     attr.requestHeaders = context->headerPointers.data();
     attr.requestData = context->body.data();
@@ -413,7 +413,7 @@ int Http::download(const std::string& url, const std::string& path, int timeout)
     emscripten_fetch_attr_t attr;
     emscripten_fetch_attr_init(&attr);
     std::strcpy(attr.requestMethod, "GET");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
     attr.timeoutMSecs = timeout * 1000;
     attr.requestHeaders = context->headerPointers.data();
     attr.userData = context.get();
