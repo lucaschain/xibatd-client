@@ -77,7 +77,7 @@ if ENABLE_SERVERS then
     }
 end
 
-g_app.setName("OTClient - Redemption");
+g_app.setName("Xiba Tower Defense");
 g_app.setCompactName("otclient");
 g_app.setOrganizationName("otcr");
 

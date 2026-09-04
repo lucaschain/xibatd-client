@@ -330,16 +330,10 @@ function EnterGame.init()
 end
 
 function EnterGame.hidePanels()
-    if g_modules.getModule("client_bottommenu"):isLoaded()  then
-        modules.client_bottommenu.hide()
-    end
     modules.client_topmenu.hide()
 end
 
 function EnterGame.showPanels()
-    if g_modules.getModule("client_bottommenu"):isLoaded()  then
-        modules.client_bottommenu.show()
-    end
     modules.client_topmenu.show()
 end
 
@@ -370,12 +364,7 @@ function EnterGame.firstShow()
     end
 
     if Services and Services.status then
-        if g_modules.getModule("client_bottommenu"):isLoaded()  then
-            EnterGame.postCacheInfo()
-            EnterGame.postEventScheduler()
-            -- EnterGame.postShowOff() -- myacc/znote no send login.php
-            EnterGame.postShowCreatureBoost()
-        end
+        EnterGame.postCacheInfo()
     end
 end
 
@@ -452,112 +441,7 @@ function EnterGame.postCacheInfo()
         end
 
         modules.client_topmenu.setPlayersOnline(response.playersonline)
-        modules.client_topmenu.setDiscordStreams(response.discord_online)
-        modules.client_topmenu.setYoutubeStreams(response.gamingyoutubestreams)
-        modules.client_topmenu.setYoutubeViewers(response.gamingyoutubeviewer)
-        modules.client_topmenu.setLinkYoutube(response.youtube_link)
-        modules.client_topmenu.setLinkDiscord(response.discord_link)
 
-    end
-
-    HTTP.post(Services.status, json.encode({
-        type = requestType
-    }), onRecvInfo, false)
-end
-
-function EnterGame.postEventScheduler()
-    local requestType = 'eventschedule'
-    local onRecvInfo = function(message, err)
-        if err then
-            reportRequestWarning(requestType, "Bad Request.Game_entergame postEventScheduler1")
-            return
-        end
-
-        local jsonString = message:match("{.*}")
-        if not jsonString then
-            reportRequestWarning(requestType, "Invalid JSON response format")
-            return
-        end
-
-        local success, response = pcall(function() return json.decode(jsonString) end)
-        if not success or not response then
-            reportRequestWarning(requestType, "Failed to parse JSON response")
-            return
-        end
-
-        if response.errorMessage then
-            reportRequestWarning(requestType, response.errorMessage, response.errorCode)
-            return
-        end
-        modules.client_bottommenu.setEventsSchedulerTimestamp(response.lastupdatetimestamp)
-        modules.client_bottommenu.setEventsSchedulerCalender(response.eventlist)
-    end
-
-    HTTP.post(Services.status, json.encode({
-        type = requestType
-    }), onRecvInfo, false)
-end
-
-function EnterGame.postShowOff()
-    local requestType = 'showoff'
-    local onRecvInfo = function(message, err)
-        if err then
-            reportRequestWarning(requestType, "Bad Request.Game_entergame postShowOff")
-            return
-        end
-
-        local jsonString = message:match("{.*}")
-        if not jsonString then
-            reportRequestWarning(requestType, "Invalid JSON response format")
-            return
-        end
-
-        local success, response = pcall(function() return json.decode(jsonString) end)
-        if not success or not response then
-            reportRequestWarning(requestType, "Failed to parse JSON response")
-            return
-        end
-
-        if response.errorMessage then
-            reportRequestWarning(requestType, response.errorMessage, response.errorCode)
-            return
-        end
-
-        modules.client_bottommenu.setShowOffData(response)
-    end
-
-    HTTP.post(Services.status, json.encode({
-        type = requestType
-    }), onRecvInfo, false)
-end
-
-function EnterGame.postShowCreatureBoost()
-    local requestType = 'boostedcreature'
-    local onRecvInfo = function(message, err)
-        if err then
-            -- onError(nil, 'Bad Request. 1 Game_entergame postShowCreatureBoost', 400)
-            reportRequestWarning(requestType, "Bad Request.Game_entergame postShowCreatureBoost1")
-            return
-        end
-
-        local jsonString = message:match("{.*}")
-        if not jsonString then
-            reportRequestWarning(requestType, "Invalid JSON response format")
-            return
-        end
-
-        local success, response = pcall(function() return json.decode(jsonString) end)
-        if not success or not response then
-            reportRequestWarning(requestType, "Failed to parse JSON response")
-            return
-        end
-
-        if response.errorMessage then
-            reportRequestWarning(requestType, response.errorMessage, response.errorCode)
-            return
-        end
-
-        modules.client_bottommenu.setBoostedCreatureAndBoss(response)
     end
 
     HTTP.post(Services.status, json.encode({
