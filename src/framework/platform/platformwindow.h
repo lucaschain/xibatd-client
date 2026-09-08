@@ -47,6 +47,7 @@ class PlatformWindow
     };
 
     using OnResizeCallback = std::function<void(const Size&)>;
+    using OnFullscreenChangeCallback = std::function<void(bool)>;
     using OnInputEventCallback = std::function<void(const InputEvent&)>;
 
 public:
@@ -72,6 +73,7 @@ public:
     virtual void setTitle(std::string_view title) = 0;
     virtual void setMinimumSize(const Size& minimumSize) = 0;
     virtual void setFullscreen(bool fullscreen) = 0;
+    virtual void setCloseWarning(bool /*enable*/) {}
     virtual void setVerticalSync(bool enable) = 0;
     virtual void setIcon(const std::string& iconFile) = 0;
     virtual void setClipboardText(std::string_view text) = 0;
@@ -131,6 +133,7 @@ public:
 
     void setOnClose(const std::function<void()>& onClose) { m_onClose = onClose; }
     void setOnResize(const OnResizeCallback& onResize) { m_onResize = onResize; }
+    void setOnFullscreenChange(const OnFullscreenChangeCallback& onFullscreenChange) { m_onFullscreenChange = onFullscreenChange; }
     void setOnInputEvent(const OnInputEventCallback& onInputEvent) { m_onInputEvent = onInputEvent; }
 
     void addKeyListener(std::function<void(const InputEvent&)> listener) { m_keyListeners.push_back(listener); }
@@ -173,6 +176,7 @@ protected:
 
     std::function<void()> m_onClose;
     OnResizeCallback m_onResize;
+    OnFullscreenChangeCallback m_onFullscreenChange;
     OnInputEventCallback m_onInputEvent;
 
     std::vector<std::function<void(const InputEvent&)>> m_keyListeners;

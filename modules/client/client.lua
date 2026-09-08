@@ -1,3 +1,11 @@
+local function onGameStart()
+    g_window.setCloseWarning(true)
+end
+
+local function onGameEnd()
+    g_window.setCloseWarning(false)
+end
+
 function startup()
     if g_sounds then
         connect(g_game, {
@@ -32,6 +40,12 @@ function startup()
 end
 
 function init()
+    connect(g_game, {
+        onGameStart = onGameStart,
+        onGameEnd = onGameEnd,
+    })
+    g_window.setCloseWarning(g_game.isOnline())
+
     if g_app.hasUpdater() then
         connect(g_app, {
             onUpdateFinished = startup,
@@ -44,6 +58,12 @@ function init()
 end
 
 function terminate()
+    disconnect(g_game, {
+        onGameStart = onGameStart,
+        onGameEnd = onGameEnd,
+    })
+    g_window.setCloseWarning(false)
+
     if g_app.hasUpdater() then
         disconnect(g_app, {
             onUpdateFinished = startup,

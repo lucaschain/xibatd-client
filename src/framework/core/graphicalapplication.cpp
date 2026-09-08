@@ -68,6 +68,10 @@ void GraphicalApplication::init(std::vector<std::string>& args, ApplicationConte
         else g_dispatcher.addEvent([&, PH1] { resize(PH1); });
     });
 
+    g_window.setOnFullscreenChange([](bool fullscreen) {
+        g_dispatcher.addEvent([fullscreen] { g_lua.callGlobalField("g_app", "onFullscreenChange", fullscreen); });
+    });
+
     g_window.setOnInputEvent([this](auto&& PH1) {
         if (!m_running) inputEvent(PH1);
         else g_dispatcher.addEvent([&, PH1] { inputEvent(PH1); });

@@ -57,12 +57,14 @@ public:
     void setTitle(const std::string_view title) override;
     void setMinimumSize(const Size& minimumSize) override;
     void setFullscreen(bool fullscreen) override;
+    void setCloseWarning(bool enable) override;
     void setVerticalSync(bool enable) override;
     void setIcon(const std::string& iconFile) override;
     void setClipboardText(const std::string_view text) override;
     void setRunning(bool running) { m_running = running; }
 
     void handleResizeCallback(const EmscriptenUiEvent* event);
+    void handleFullscreenCallback(const EmscriptenFullscreenChangeEvent* event);
     void handleMouseCallback(int eventType, const EmscriptenMouseEvent* event);
     void handleMouseWheelCallback(const EmscriptenWheelEvent* event);
     void handleMouseMotionCallback(const EmscriptenMouseEvent* event);

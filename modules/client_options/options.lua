@@ -18,8 +18,17 @@ local function onAppExit()
     g_settings.save()
 end
 
+local function onFullscreenChange(fullscreen)
+    if g_platform.isBrowser() and options.fullscreen.value ~= fullscreen then
+        setOption('fullscreen', fullscreen, true, true)
+    end
+end
+
 -- Register the exit hook when the module is loaded
-connect(g_app, { onExit = onAppExit })
+connect(g_app, {
+    onExit = onAppExit,
+    onFullscreenChange = onFullscreenChange,
+})
 
 -- LuaFormatter off
 local buttons = { {
@@ -386,7 +395,10 @@ function controller:onTerminate()
     g_settings.save()
     
     -- Disconnect from app exit
-    disconnect(g_app, { onExit = onAppExit })
+    disconnect(g_app, {
+        onExit = onAppExit,
+        onFullscreenChange = onFullscreenChange,
+    })
     
     extraWidgets.optionsButton:destroy()
     extraWidgets.audioButton:destroy()
@@ -427,7 +439,7 @@ function controller:onGameStart()
     end
 end
 
-function setOption(key, value, force)
+function setOption(key, value, force, skipAction)
     if not modules.game_interface then
         return
     end
@@ -442,10 +454,14 @@ function setOption(key, value, force)
         return
     end
 
-    if option.action then
+    if option.action and not skipAction then
         option.action(value, options, controller, panels, extraWidgets)
     end
 
+    -- Prevent programmatic synchronization from feeding back through onCheckChange.
+    if skipAction then
+        option.value = value
+    end
 
     -- change value for keybind updates
     for _, panel in pairs(panels) do

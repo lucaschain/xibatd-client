@@ -157,6 +157,7 @@ void BrowserWindow::terminate() {
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, nullptr);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, nullptr);
     emscripten_set_visibilitychange_callback(this, EM_TRUE, nullptr);
+    emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, EM_TRUE, nullptr);
     emscripten_set_beforeunload_callback(this, nullptr);
     emscripten_set_touchend_callback("#canvas", this, EM_TRUE, nullptr);
     emscripten_set_touchstart_callback("#canvas", this, EM_TRUE, nullptr);
@@ -237,6 +238,10 @@ void BrowserWindow::poll() {
         emscripten_set_visibilitychange_callback(this, EM_TRUE, ([](int, const EmscriptenVisibilityChangeEvent* event, void*) -> EM_BOOL {
             if (event->hidden)
                 g_configs.saveSettings();
+            return EM_FALSE;
+        }));
+        emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, EM_TRUE, ([](int, const EmscriptenFullscreenChangeEvent* event, void* userData) -> EM_BOOL {
+            static_cast<BrowserWindow*>(userData)->handleFullscreenCallback(event);
             return EM_FALSE;
         }));
         emscripten_set_beforeunload_callback(this, ([](int, const void*, void*) -> const char* {
@@ -384,6 +389,12 @@ void BrowserWindow::handleResizeCallback(const EmscriptenUiEvent* event) {
         m_size = Size(int(w), int(h));
         m_onResize(m_size);
     }
+}
+
+void BrowserWindow::handleFullscreenCallback(const EmscriptenFullscreenChangeEvent* event) {
+    m_fullscreen = event->isFullscreen;
+    if (m_onFullscreenChange)
+        m_onFullscreenChange(m_fullscreen);
 }
 
 void BrowserWindow::handleMouseMotionCallback(const EmscriptenMouseEvent* mouseEvent) {
@@ -586,7 +597,18 @@ void BrowserWindow::setTitle(const std::string_view title) {}
 
 void BrowserWindow::setMinimumSize(const Size& minimumSize) {}
 
-void BrowserWindow::setFullscreen(bool fullscreen) {}
+void BrowserWindow::setFullscreen(bool fullscreen) {
+    // The shell keeps the request and Keyboard Lock in the browser's user-activation context.
+    MAIN_THREAD_EM_ASM({
+        Module.setGameFullscreen(Boolean($0));
+    }, fullscreen);
+}
+
+void BrowserWindow::setCloseWarning(bool enable) {
+    MAIN_THREAD_ASYNC_EM_ASM({
+        Module.setWarnBeforeUnload(Boolean($0));
+    }, enable);
+}
 
 void BrowserWindow::setIcon(const std::string& iconFile) {}
 

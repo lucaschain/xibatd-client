@@ -74,6 +74,91 @@
     ></canvas>
     <script type="text/javascript">
       var canvas = document.getElementById("canvas");
+      let fullscreenRequestPending = false;
+      let fullscreenRequestInFlight = false;
+
+      async function lockGameKeyboard() {
+        if (!("keyboard" in navigator) || !("lock" in navigator.keyboard)) {
+          console.warn(
+            "Keyboard Lock is unavailable; use Ctrl+Up to face north.",
+          );
+          return;
+        }
+
+        try {
+          await navigator.keyboard.lock(["KeyW"]);
+        } catch (error) {
+          console.warn(
+            "Keyboard Lock was denied; use Ctrl+Up to face north.",
+            error,
+          );
+        }
+      }
+
+      async function requestGameFullscreen() {
+        if (fullscreenRequestInFlight || document.fullscreenElement) return;
+
+        fullscreenRequestInFlight = true;
+        const keyboardLock = lockGameKeyboard();
+        try {
+          await canvas.requestFullscreen({ navigationUI: "hide" });
+          if (!fullscreenRequestPending) {
+            if ("keyboard" in navigator && "unlock" in navigator.keyboard) {
+              navigator.keyboard.unlock();
+            }
+            await document.exitFullscreen();
+            return;
+          }
+
+          fullscreenRequestPending = false;
+          await keyboardLock;
+        } catch (error) {
+          if ("keyboard" in navigator && "unlock" in navigator.keyboard) {
+            navigator.keyboard.unlock();
+          }
+          console.warn(
+            "Fullscreen was denied; click the game to try again.",
+            error,
+          );
+        } finally {
+          fullscreenRequestInFlight = false;
+        }
+      }
+
+      function setGameFullscreen(enabled) {
+        fullscreenRequestPending = enabled;
+        if (enabled) {
+          requestGameFullscreen();
+          return;
+        }
+
+        if ("keyboard" in navigator && "unlock" in navigator.keyboard) {
+          navigator.keyboard.unlock();
+        }
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(function (error) {
+            console.warn("Could not exit fullscreen.", error);
+          });
+        }
+      }
+
+      document.addEventListener(
+        "pointerdown",
+        function () {
+          if (fullscreenRequestPending && !document.fullscreenElement) {
+            requestGameFullscreen();
+          }
+        },
+        true,
+      );
+      document.addEventListener("fullscreenchange", function () {
+        if (!document.fullscreenElement) {
+          fullscreenRequestPending = false;
+          if ("keyboard" in navigator && "unlock" in navigator.keyboard) {
+            navigator.keyboard.unlock();
+          }
+        }
+      });
       function reportRuntimeError(prefix, error) {
         const payload = [prefix, error]
           .flat()
@@ -181,6 +266,7 @@
       }
 
       var Module = {
+        setGameFullscreen: setGameFullscreen,
         requestPersistentStorageSync: requestPersistentStorageSync,
         locateFile: function (path) {
           const baseURL =
@@ -237,6 +323,14 @@
           console.log("monitor run deps: " + left);
           document.getElementById("title-text").innerHTML = "Initializing...";
         },
+      };
+      function warnBeforeUnload(event) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+      Module.setWarnBeforeUnload = function (enabled) {
+        const action = enabled ? "addEventListener" : "removeEventListener";
+        window[action]("beforeunload", warnBeforeUnload);
       };
       window.onerror = function (message, source, lineno, colno, error) {
         reportRuntimeError("window.onerror", error || message);
