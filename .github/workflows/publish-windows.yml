@@ -1,6 +1,29 @@
 name: Publish Windows client
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "data/**"
+      - "mods/**"
+      - "modules/**"
+      - "src/**"
+      - "cmake/**"
+      - "vc18/**"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+      - "overlay-ports/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "init.lua"
+      - "otclientrc.lua"
+      - "config.ini"
+      - "cacert.pem"
+      - "LICENSE"
+      - ".github/workflows/reusable-build-windows.yml"
+      - ".github/workflows/reusable-tests-lua.yml"
+      - ".github/workflows/publish-windows.yml"
   workflow_dispatch:
     inputs:
       version:
@@ -54,7 +77,7 @@ jobs:
       - name: Resolve release metadata
         id: release
         env:
-          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_VERSION: ${{ inputs.version || '0.1.0' }}
         run: |
           set -Eeuo pipefail
           version="$INPUT_VERSION"
