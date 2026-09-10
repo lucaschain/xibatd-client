@@ -1034,6 +1034,10 @@ function BattleListInstance:doCreatureFitFilters(creature)
     if creature:isLocalPlayer() then
         return false
     end
+
+    if creature:isMonster() and creature:getName():lower() == 'raid crystal' then
+        return false
+    end
     
     if creature:isDead() then
         return false
