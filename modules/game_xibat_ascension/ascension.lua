@@ -150,6 +150,22 @@ function xibatAscensionController:requestSync()
     if g_game.isOnline() then g_game.getProtocolGame():sendExtendedJSONOpcode(ASCENSION_OPCODE, { action = 'sync' }) end
 end
 
+function xibatAscensionController:cancelLoginSync()
+    if self.syncEvent then self:removeEvent(self.syncEvent) self.syncEvent = nil end
+end
+
+function xibatAscensionController:syncOnLogin(attempt)
+    self:cancelLoginSync()
+    if not g_game.isOnline() or self.availablePoints ~= nil then return end
+    self:requestSync()
+    if attempt < 4 and self.availablePoints == nil then
+        self.syncEvent = self:scheduleEvent(function()
+            self.syncEvent = nil
+            self:syncOnLogin(attempt + 1)
+        end, 1000)
+    end
+end
+
 function xibatAscensionController:toggle()
     if self.ui:isVisible() then self:close() else self:requestOpen() end
 end
@@ -181,6 +197,7 @@ function xibatAscensionController:updateLauncher()
 end
 
 function xibatAscensionController:applyProgressSummary(progress)
+    self:cancelLoginSync()
     self.availablePoints = progress.availablePoints
     if self.snapshot then
         for field in pairs(progressSummaryFields) do self.snapshot.progress[field] = progress[field] end
@@ -276,6 +293,7 @@ function xibatAscensionController:renderCategory()
 end
 
 function xibatAscensionController:renderView(snapshot)
+    self:cancelLoginSync()
     self.snapshot = snapshot
     self.availablePoints = snapshot.progress.availablePoints
     self.categoryButtons = {}
@@ -365,9 +383,10 @@ function xibatAscensionController:onGameStart()
     self.availablePoints = nil
     self:createLauncher()
     self:updateLauncher()
-    self:requestSync()
+    self:syncOnLogin(1)
 end
 function xibatAscensionController:onGameEnd()
+    self:cancelLoginSync()
     self:destroyPrompt()
     self.snapshot = nil
     self.pendingRequest = nil
@@ -377,6 +396,7 @@ function xibatAscensionController:onGameEnd()
     self:close()
 end
 function xibatAscensionController:onTerminate()
+    self:cancelLoginSync()
     self:destroyPrompt()
     self:close()
     if self.launcher then

@@ -20,6 +20,7 @@ param(
     [string]$AssetsPath = '',
     [string]$VcpkgRoot = $env:VCPKG_ROOT,
     [int]$Jobs = 0,
+    [switch]$UIOnly,
     [switch]$Run
 )
 
@@ -103,6 +104,33 @@ if (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
     $OutputPath = Join-Path $sourceRoot $OutputPath
 }
 $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+
+if ($UIOnly) {
+    if (Get-Process otclient -ErrorAction SilentlyContinue) {
+        throw 'Stop otclient.exe before deploying UI files.'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $OutputPath 'otclient.exe') -PathType Leaf)) {
+        throw 'UI-only deployment requires an existing client installation. Run a full build first.'
+    }
+    foreach ($directory in 'modules', 'mods', 'data') {
+        $source = Join-Path $sourceRoot $directory
+        $destination = Join-Path $OutputPath $directory
+        # Copy updates without deleting installed assets or user-added files.
+        $copyArguments = @($source, $destination, '/E', '/COPY:DAT', '/R:2', '/W:1', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS')
+        if ($directory -eq 'data') {
+            $copyArguments += @('/XD', (Join-Path $source 'things'), (Join-Path $source 'sounds'))
+        }
+        & robocopy.exe @copyArguments
+        if ($LASTEXITCODE -gt 7) {
+            throw "Failed to deploy UI directory '$directory' (robocopy exit $LASTEXITCODE)."
+        }
+    }
+    Write-Host "Client UI deployed to $OutputPath (executable unchanged)"
+    if ($Run) {
+        Start-Process -FilePath (Join-Path $OutputPath 'otclient.exe') -WorkingDirectory $OutputPath
+    }
+    return
+}
 
 Import-VisualStudioEnvironment
 

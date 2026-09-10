@@ -31,6 +31,25 @@ The default asset directory is `data\things\1098` under the checkout and must co
 
 ## Options
 
+### UI-only deployment
+
+For Lua, OTUI, and UI image changes, close the client and run:
+
+```powershell
+.\build-windows.ps1 -UIOnly
+```
+
+This updates `modules`, `mods`, and UI resources under `data` in the existing
+installation, without compiling or requiring Visual Studio/vcpkg. It excludes
+`data\things` and `data\sounds`, preserves the executable and root configuration,
+and does not delete destination files. Use the full build/deployment for C++ changes,
+root startup/configuration changes, or when removed files need to be cleared.
+
+`-OutputPath` selects the installation and `-Run` optionally reopens it. Success is
+reported as `Client UI deployed to <path> (executable unchanged)`.
+
+### Full build options
+
 ```powershell
 .\build-windows.ps1 -Jobs 8
 .\build-windows.ps1 -OutputPath 'D:\XibaTD-Test'

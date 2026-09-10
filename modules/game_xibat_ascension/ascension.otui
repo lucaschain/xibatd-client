@@ -15,7 +15,7 @@ AscensionCategoryButton < Button
     text-offset: 11 1
 
 AscensionNodeCard < Panel
-  size: 136 200
+  size: 139 209
   background-color: #182126
   border-width: 1
   border-color: #40515a
@@ -85,12 +85,19 @@ AscensionNodeCard < Panel
 
 AscensionViewportButton < UIButton
   size: 72 72
-  anchors.top: parent.top
   anchors.right: parent.right
-  margin-top: 116
-  margin-right: 12
+  anchors.bottom: parent.bottom
+  margin-right: 10
+  margin-bottom: 10
+  background-color: #172128f2
+  border-width: 2
+  border-color: #8c713b
   focusable: false
   visible: false
+
+  $hover:
+    background-color: #22313af7
+    border-color: #d7af58
 
   UIWidget
     id: glow
@@ -119,7 +126,7 @@ AscensionViewportButton < UIButton
     id: icon
     size: 40 40
     anchors.centerIn: parent
-    image-source: /game_xibat_ascension/images/passives/raid_start_level
+    image-source: /game_xibat_ascension/images/upgrade
     image-smooth: true
     phantom: true
 
@@ -134,25 +141,46 @@ AscensionViewportButton < UIButton
     border-width: 1
     border-color: #fff0b8
     color: #241704
-    font: verdana-11px-rounded
+    font: verdana-11px-antialised
     text-align: center
     text: 1
     phantom: true
 
 MainWindow
   id: ascensionWindow
-  size: 970 610
+  size: 970 578
+  padding-top: 28
   text: Ascension
   image-source: /images/ui/window
   @onEscape: xibatAscensionController:close()
+
+  UIButton
+    id: closeButton
+    anchors.top: parent.top
+    anchors.right: parent.right
+    margin-top: -22
+    margin-right: -10
+    size: 12 12
+    image-size: 14 14
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 28 0 14 14
+    !tooltip: tr('Close')
+    @onClick: xibatAscensionController:close()
+
+    $hover:
+      image-clip: 28 14 14 14
+
+    $pressed:
+      image-clip: 28 28 14 14
 
   Label
     id: level
     anchors.top: parent.top
     anchors.left: parent.left
+    anchors.right: categoryRail.right
     margin-top: 8
-    margin-left: 16
-    font: verdana-11px-rounded
+    margin-left: 0
+    font: verdana-11px-antialised
     color: #e4b95e
     text: Ascension Level 12
 
@@ -160,18 +188,22 @@ MainWindow
     id: points
     anchors.top: level.bottom
     anchors.left: level.left
+    anchors.right: categoryRail.right
     margin-top: 3
+    height: 28
+    text-wrap: true
+    text-align: topLeft
     color: #c8d5d9
     text: 4 points available | 18 invested
 
   ProgressBar
     id: experience
-    anchors.top: parent.top
+    anchors.bottom: reset.top
     anchors.left: parent.left
     anchors.right: parent.right
-    margin-top: 12
-    margin-left: 220
-    margin-right: 22
+    margin-bottom: 8
+    margin-left: 0
+    margin-right: 0
     height: 18
     text-offset: 0 -2
     text: 1,240 / 2,000 experience
@@ -180,11 +212,11 @@ MainWindow
   Panel
     id: categoryRail
     anchors.top: parent.top
-    anchors.bottom: parent.bottom
+    anchors.bottom: experience.top
     anchors.left: parent.left
-    margin-top: 64
-    margin-bottom: 48
-    margin-left: 14
+    margin-top: 48
+    margin-bottom: 8
+    margin-left: 0
     width: 190
     layout:
       type: verticalBox
@@ -207,14 +239,16 @@ MainWindow
     anchors.bottom: categoryRail.bottom
     anchors.left: categoryRail.right
     margin-left: 8
+    margin-bottom: 7
 
   Label
     id: categoryTitle
-    anchors.top: categoryRail.top
+    anchors.top: parent.top
     anchors.left: categoryRail.right
     anchors.right: parent.right
-    margin-left: 22
-    margin-right: 18
+    margin-top: 8
+    margin-left: 21
+    margin-right: 0
     font: verdana-11px-rounded
     color: #e4b95e
     text: Crystal Defense
@@ -233,12 +267,12 @@ MainWindow
     anchors.top: categoryProgress.bottom
     anchors.left: categoryTitle.left
     anchors.right: categoryTitle.right
-    anchors.bottom: parent.bottom
+    anchors.bottom: experience.top
     margin-top: 12
-    margin-bottom: 52
+    margin-bottom: 8
     layout:
       type: grid
-      cell-size: 136 200
+      cell-size: 139 209
       cell-spacing: 8
       num-columns: 5
 

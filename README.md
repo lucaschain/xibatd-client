@@ -520,6 +520,9 @@ build entry point. Run it from a native Windows checkout in PowerShell:
 .\build-windows.ps1
 ```
 
+For Lua/OTUI/UI-image changes, close the client and use
+`.\build-windows.ps1 -UIOnly` to update the existing installation without compilation.
+
 The upstream Wiki, direct CMake commands, Visual Studio solution, WSL/Linux, and
 Docker instructions are reference workflows only; they do not produce the supported
 Xibat client deployment.

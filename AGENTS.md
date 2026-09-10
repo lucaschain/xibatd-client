@@ -11,6 +11,7 @@
 - `build-windows.ps1` from a native Windows checkout is the only supported Xibat client build entry point.
 - Do not substitute direct CMake, Visual Studio, WSL/Linux, or Docker builds when asked to build the client.
 - See `docs/building/xibat-windows.md` for prerequisites, outputs, and options.
+- For Lua/OTUI/UI-image-only deployments, use `build-windows.ps1 -UIOnly` with the client closed; this skips compilation and preserves installed game assets.
 
 ## Client Assets Gate (Mandatory)
 

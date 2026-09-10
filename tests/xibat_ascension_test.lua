@@ -19,8 +19,16 @@ requireValue(not styleSource:match('\n%s*UIImage%s*\n') and
     'Ascension symbolic icon must use the registered UIWidget type')
 requireValue(styleSource:match('AscensionViewportButton < UIButton') and
     styleSource:match('size: 72 72') and styleSource:match('id: badge') and
-    styleSource:match('/images/ui/highlight') and styleSource:match('/images/ui/bright%-x20'),
+    styleSource:match('anchors%.bottom: parent%.bottom') and styleSource:match('margin%-right: 10') and
+    styleSource:match('margin%-bottom: 10') and styleSource:match('background%-color: #172128f2') and
+    styleSource:match('/images/ui/highlight') and styleSource:match('/images/ui/bright%-x20') and
+    styleSource:match('/game_xibat_ascension/images/upgrade'),
     'Ascension viewport launcher must retain its large highlighted badge presentation')
+for _, path in ipairs({ 'upgrade.svg', 'upgrade.png', 'LICENSE-upgrade.md' }) do
+    local iconFile = io.open(root .. '/modules/game_xibat_ascension/images/' .. path, 'rb')
+    requireValue(iconFile, 'missing vendored Ascension upgrade icon file: ' .. path)
+    iconFile:close()
+end
 
 local state = { callbacks = {}, sent = {}, events = {}, nextEvent = 1 }
 
@@ -184,9 +192,15 @@ controller:onGameStart()
 requireValue(#state.sent == 1 and state.sent[1].opcode == 203 and state.sent[1].payload.action == 'sync' and
     not ui.visible and not controller.launcher.visible,
     'Ascension game start did not perform one silent authoritative sync')
+local retry = controller.syncEvent
+requireValue(retry and state.events[retry], 'login sync has no recovery for a missed startup response')
+state.events[retry]()
+requireValue(#state.sent == 2 and state.sent[2].payload.action == 'sync' and not ui.visible,
+    'missed login sync did not retry silently')
 state.sent = {}
 
 state.callbacks[203](nil, 203, status(12))
+requireValue(not controller.syncEvent, 'authoritative status did not cancel login retries')
 requireValue(controller.launcher.visible and controller.launcher.badge.text == '12' and
     controller.launcher.badge.width == 26 and not ui.visible,
     'Ascension status did not show the viewport badge without opening the board')
