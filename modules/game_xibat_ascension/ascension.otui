@@ -83,6 +83,62 @@ AscensionNodeCard < Panel
     height: 25
     text: Spend 2
 
+AscensionViewportButton < UIButton
+  size: 72 72
+  anchors.top: parent.top
+  anchors.right: parent.right
+  margin-top: 116
+  margin-right: 12
+  focusable: false
+  visible: false
+
+  UIWidget
+    id: glow
+    anchors.fill: parent
+    image-source: /images/ui/highlight
+    image-smooth: true
+    phantom: true
+
+  UIWidget
+    id: bright
+    size: 64 64
+    anchors.centerIn: parent
+    image-source: /images/ui/bright-x20
+    image-smooth: true
+    phantom: true
+
+  UIWidget
+    id: frame
+    size: 58 58
+    anchors.centerIn: parent
+    image-source: /images/game/wheel/backdrop_skillwheel_socket_active
+    image-smooth: true
+    phantom: true
+
+  UIWidget
+    id: icon
+    size: 40 40
+    anchors.centerIn: parent
+    image-source: /game_xibat_ascension/images/passives/raid_start_level
+    image-smooth: true
+    phantom: true
+
+  Label
+    id: badge
+    size: 24 22
+    anchors.top: parent.top
+    anchors.right: parent.right
+    margin-top: -2
+    margin-right: -2
+    background-color: #e4b95eff
+    border-width: 1
+    border-color: #fff0b8
+    color: #241704
+    font: verdana-11px-rounded
+    text-align: center
+    text: 1
+    phantom: true
+
 MainWindow
   id: ascensionWindow
   size: 970 610

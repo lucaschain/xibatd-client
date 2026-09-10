@@ -43,6 +43,10 @@ local function hasExactFields(value, required, optional)
     return true
 end
 
+local progressSummaryFields = {
+    level = true, levelExperience = true, levelExperienceRequired = true, levelProgress = true,
+    availablePoints = true, totalSpentPoints = true,
+}
 local progressFields = {
     level = true, levelExperience = true, levelExperienceRequired = true, levelProgress = true,
     availablePoints = true, totalSpentPoints = true, spentPoints = true,
@@ -52,17 +56,30 @@ local passiveFields = { name = true, cost = true, unlockPoints = true, raidLevel
 local passiveOptionalFields = { icon = true }
 local itemFields = { clientId = true, name = true, count = true }
 
-local function validateProgress(progress)
-    if not hasExactFields(progress, progressFields) or not isIntegerInRange(progress.level, 1, 100000) or
+local function validateProgressValues(progress)
+    if type(progress) ~= 'table' or not isIntegerInRange(progress.level, 1, 100000) or
         not isIntegerInRange(progress.levelExperience, 0, 2147483647) or
         not isIntegerInRange(progress.levelExperienceRequired, 1, 2147483647) or
         progress.levelExperience > progress.levelExperienceRequired or type(progress.levelProgress) ~= 'number' or
         progress.levelProgress < 0 or progress.levelProgress > 1 or
         not isIntegerInRange(progress.availablePoints, 0, 2147483647) or
-        not isIntegerInRange(progress.totalSpentPoints, 0, 2147483647) or type(progress.spentPoints) ~= 'table' then
+        not isIntegerInRange(progress.totalSpentPoints, 0, 2147483647) then
         return false
     end
     return true
+end
+
+local function validateProgress(progress)
+    return hasExactFields(progress, progressFields) and validateProgressValues(progress) and
+        type(progress.spentPoints) == 'table'
+end
+
+local function validateStatus(payload)
+    if not hasExactFields(payload, { action = true, body = true }) or payload.action ~= 'ascensionStatus' or
+        not hasExactFields(payload.body, { progress = true }) or
+        not hasExactFields(payload.body.progress, progressSummaryFields) or
+        not validateProgressValues(payload.body.progress) then return nil end
+    return payload.body.progress
 end
 
 local function validateView(payload)
@@ -129,13 +146,47 @@ function xibatAscensionController:requestOpen()
     if g_game.isOnline() then g_game.getProtocolGame():sendExtendedJSONOpcode(ASCENSION_OPCODE, { action = 'open' }) end
 end
 
+function xibatAscensionController:requestSync()
+    if g_game.isOnline() then g_game.getProtocolGame():sendExtendedJSONOpcode(ASCENSION_OPCODE, { action = 'sync' }) end
+end
+
 function xibatAscensionController:toggle()
     if self.ui:isVisible() then self:close() else self:requestOpen() end
 end
 
 function xibatAscensionController:close()
     self.ui:hide()
-    if self.button then self.button:setOn(false) end
+end
+
+function xibatAscensionController:createLauncher()
+    if self.launcher and not self.launcher:isDestroyed() then return end
+    local panel = modules.game_interface.getMapPanel()
+    if not panel or panel:isDestroyed() then return end
+    self.launcher = g_ui.createWidget('AscensionViewportButton', panel)
+    if not self.launcher then return end
+    self.launcher.onClick = function() self:toggle() return true end
+    self.launcher:hide()
+end
+
+function xibatAscensionController:updateLauncher()
+    if not self.launcher or self.launcher:isDestroyed() then return end
+    local visible = g_game.isOnline() and type(self.availablePoints) == 'number' and self.availablePoints > 0
+    if not visible then self.launcher:hide() return end
+    local text = tostring(self.availablePoints)
+    self.launcher.badge:setText(text)
+    self.launcher.badge:setWidth(math.max(24, 12 + #text * 7))
+    self.launcher:setTooltip(tr('Ascension: %d points available (Ctrl+H)', self.availablePoints))
+    self.launcher:show()
+    self.launcher:raise()
+end
+
+function xibatAscensionController:applyProgressSummary(progress)
+    self.availablePoints = progress.availablePoints
+    if self.snapshot then
+        for field in pairs(progressSummaryFields) do self.snapshot.progress[field] = progress[field] end
+        if self.ui:isVisible() then self:renderCategory() end
+    end
+    self:updateLauncher()
 end
 
 function xibatAscensionController:destroyPrompt()
@@ -226,6 +277,7 @@ end
 
 function xibatAscensionController:renderView(snapshot)
     self.snapshot = snapshot
+    self.availablePoints = snapshot.progress.availablePoints
     self.categoryButtons = {}
     self.ui.categoryRail:destroyChildren()
     for _, category in ipairs(snapshot.categories) do
@@ -240,7 +292,7 @@ function xibatAscensionController:renderView(snapshot)
     self.ui:show()
     self.ui:raise()
     self.ui:focus()
-    if self.button then self.button:setOn(true) end
+    self:updateLauncher()
 end
 
 function xibatAscensionController:applyResult(result)
@@ -254,6 +306,8 @@ function xibatAscensionController:applyResult(result)
         'availablePoints', 'totalSpentPoints' }) do
         self.snapshot.progress[field] = state[field]
     end
+    self.availablePoints = state.availablePoints
+    self:updateLauncher()
     if result.ok then
         if result.operation == 'reset' then
             for _, category in ipairs(self.snapshot.categories) do
@@ -275,6 +329,8 @@ function xibatAscensionController:applyResult(result)
 end
 
 function xibatAscensionController:onOpcode(_, _, payload)
+    local progress = validateStatus(payload)
+    if progress then self:applyProgressSummary(progress) return end
     local snapshot = validateView(payload)
     if snapshot then self:renderView(snapshot) return end
     local result = validateResult(payload)
@@ -301,21 +357,30 @@ function xibatAscensionController:onInit()
     self.ui.reset.onClick = function() self:confirmReset() end
     self:registerExtendedJSONOpcode(ASCENSION_OPCODE, function(...) self:onOpcode(...) end)
     self:bindKeyDown('Ctrl+H', function() self:toggle() end)
-    self.button = modules.client_topmenu.addRightGameToggleButton('xibatAscension', tr('Ascension (Ctrl+H)'),
-        '/images/topbuttons/skills', function() self:toggle() end, false)
-    self.button:setOn(false)
+    self:createLauncher()
 end
 
-function xibatAscensionController:onGameStart() self:close() end
+function xibatAscensionController:onGameStart()
+    self:close()
+    self.availablePoints = nil
+    self:createLauncher()
+    self:updateLauncher()
+    self:requestSync()
+end
 function xibatAscensionController:onGameEnd()
     self:destroyPrompt()
     self.snapshot = nil
     self.pendingRequest = nil
     self.pendingEvent = nil
+    self.availablePoints = nil
+    self:updateLauncher()
     self:close()
 end
 function xibatAscensionController:onTerminate()
     self:destroyPrompt()
     self:close()
-    if self.button then self.button:destroy() self.button = nil end
+    if self.launcher then
+        if not self.launcher:isDestroyed() then self.launcher:destroy() end
+        self.launcher = nil
+    end
 end

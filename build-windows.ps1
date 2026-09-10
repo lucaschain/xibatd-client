@@ -17,7 +17,7 @@ filesystem for reliable incremental builds.
 [CmdletBinding()]
 param(
     [string]$OutputPath = 'D:\XibaTD',
-    [string]$AssetsPath = (Join-Path $PSScriptRoot 'data\things\1098'),
+    [string]$AssetsPath = '',
     [string]$VcpkgRoot = $env:VCPKG_ROOT,
     [int]$Jobs = 0,
     [switch]$Run
@@ -92,6 +92,9 @@ function Copy-DirectoryTree {
 }
 
 $sourceRoot = (Resolve-Path -LiteralPath $PSScriptRoot).ProviderPath
+if ([string]::IsNullOrWhiteSpace($AssetsPath)) {
+    $AssetsPath = Join-Path $sourceRoot 'data\things\1098'
+}
 if ($sourceRoot.StartsWith('\\')) {
     throw 'Build from a native Windows checkout such as C:\src\xibatd-client, not from a \\wsl.localhost or other UNC path.'
 }

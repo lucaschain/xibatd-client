@@ -6,6 +6,12 @@
 - Codex applies a combined instruction budget (32 KiB by default) across global, root, and nested guidance. Keep mandatory gates first and preserve headroom for narrower scopes.
 - Do not raise `project_doc_max_bytes` as the first response to oversized guidance; remove duplication and route conditional detail first.
 
+## Supported Build Gate
+
+- `build-windows.ps1` from a native Windows checkout is the only supported Xibat client build entry point.
+- Do not substitute direct CMake, Visual Studio, WSL/Linux, or Docker builds when asked to build the client.
+- See `docs/building/xibat-windows.md` for prerequisites, outputs, and options.
+
 ## Client Assets Gate (Mandatory)
 
 Any change touching client-assets auto-installation must preserve the runtime contract below:

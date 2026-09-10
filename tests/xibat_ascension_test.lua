@@ -17,6 +17,10 @@ styleFile:close()
 requireValue(not styleSource:match('\n%s*UIImage%s*\n') and
     styleSource:match('\n%s*UIWidget%s*\n%s*id: icon'),
     'Ascension symbolic icon must use the registered UIWidget type')
+requireValue(styleSource:match('AscensionViewportButton < UIButton') and
+    styleSource:match('size: 72 72') and styleSource:match('id: badge') and
+    styleSource:match('/images/ui/highlight') and styleSource:match('/images/ui/bright%-x20'),
+    'Ascension viewport launcher must retain its large highlighted badge presentation')
 
 local state = { callbacks = {}, sent = {}, events = {}, nextEvent = 1 }
 
@@ -28,6 +32,7 @@ local function makeWidget()
     function widget:raise() end
     function widget:focus() end
     function widget:destroy() self.destroyed = true end
+    function widget:isDestroyed() return self.destroyed == true end
     function widget:destroyChildren() self.children = {} end
     function widget:setText(text) self.text = text end
     function widget:setEnabled(enabled) self.enabled = enabled end
@@ -39,11 +44,13 @@ local function makeWidget()
     function widget:setImageSource(source) self.imageSource = source end
     function widget:setColor(color) self.color = color end
     function widget:setBackgroundColor(color) self.backgroundColor = color end
+    function widget:setWidth(width) self.width = width end
     function widget:setOn(on) self.on = on end
     return widget
 end
 
 local ui = makeWidget()
+local mapPanel = makeWidget()
 for _, id in ipairs({
     'categoryRail', 'nodes', 'categoryTitle', 'categoryProgress', 'message', 'level', 'points', 'experience', 'reset',
 }) do
@@ -53,7 +60,7 @@ end
 local environment = {
     modules = {
         game_xibat_core = { XibatOpcode = { Ascension = 203 } },
-        client_topmenu = {},
+        game_interface = { getMapPanel = function() return mapPanel end },
     },
     Controller = {},
     g_game = {},
@@ -76,12 +83,6 @@ function environment.Controller:new()
     return controller
 end
 
-function environment.modules.client_topmenu.addRightGameToggleButton(_, _, _, callback)
-    local button = makeWidget()
-    button.callback = callback
-    return button
-end
-
 function environment.g_game.isOnline() return true end
 function environment.g_game.getProtocolGame()
     return {
@@ -97,6 +98,8 @@ function environment.g_ui.createWidget(style, parent)
         for _, id in ipairs({ 'item', 'icon', 'name', 'requirement', 'status', 'spend' }) do
             widget[id] = makeWidget()
         end
+    elseif style == 'AscensionViewportButton' then
+        for _, id in ipairs({ 'glow', 'bright', 'frame', 'icon', 'badge' }) do widget[id] = makeWidget() end
     end
     table.insert(parent.children, widget)
     return widget
@@ -156,11 +159,47 @@ local function result(operation, requestId, ok, code, stateBody)
     }
 end
 
+local function status(availablePoints, extra)
+    local progress = {
+        level = 4,
+        levelExperience = 25,
+        levelExperienceRequired = 100,
+        levelProgress = 0.25,
+        availablePoints = availablePoints,
+        totalSpentPoints = 0,
+    }
+    if extra then progress.extra = true end
+    return { action = 'ascensionStatus', body = { progress = progress } }
+end
+
 loadModule('modules/game_xibat_ascension/ascension.lua', environment)
 local controller = environment.xibatAscensionController
 controller.ui = ui
 controller:onInit()
-requireValue(state.callbacks[203] and state.hotkey and controller.button, 'Ascension lifecycle was not registered')
+requireValue(state.callbacks[203] and state.hotkey and controller.launcher and
+    controller.launcher == mapPanel.children[1] and not controller.launcher.visible,
+    'Ascension lifecycle or viewport launcher was not registered')
+
+controller:onGameStart()
+requireValue(#state.sent == 1 and state.sent[1].opcode == 203 and state.sent[1].payload.action == 'sync' and
+    not ui.visible and not controller.launcher.visible,
+    'Ascension game start did not perform one silent authoritative sync')
+state.sent = {}
+
+state.callbacks[203](nil, 203, status(12))
+requireValue(controller.launcher.visible and controller.launcher.badge.text == '12' and
+    controller.launcher.badge.width == 26 and not ui.visible,
+    'Ascension status did not show the viewport badge without opening the board')
+controller.launcher.onClick()
+requireValue(#state.sent == 1 and state.sent[1].payload.action == 'open',
+    'Ascension viewport launcher did not request the board')
+state.sent = {}
+
+state.callbacks[203](nil, 203, status(0, true))
+requireValue(controller.availablePoints == 12 and controller.launcher.visible,
+    'malformed Ascension status changed launcher state')
+state.callbacks[203](nil, 203, status(0))
+requireValue(not controller.launcher.visible, 'zero available Ascension points did not hide the launcher')
 
 local invalid = makeView()
 invalid.body.extra = true
@@ -193,16 +232,30 @@ state.callbacks[203](nil, 203, result('spend', 1, true, 'ok', {
     availablePoints = 0, totalSpentPoints = 1, categoryId = 1, spentPoints = 1,
 }))
 requireValue(not controller.pendingRequest and controller.snapshot.categories[1].spentPoints == 1 and
-    not ui.nodes.children[2].spend.enabled, 'Ascension spend result did not update authoritative state')
+    not ui.nodes.children[2].spend.enabled and not controller.launcher.visible,
+    'Ascension spend result did not update authoritative state or launcher')
 
 ui.reset.onClick()
 requireValue(state.prompt and #state.prompt.buttons == 2, 'Ascension reset did not require confirmation')
 local prompt = state.prompt
-controller:onGameEnd()
-requireValue(prompt.destroyed and not ui.visible and not controller.snapshot,
-    'Ascension logout retained its view or reset confirmation')
+prompt.buttons[1].callback()
+requireValue(state.sent[2].payload.action == 'reset' and state.sent[2].payload.requestId == 2,
+    'Ascension reset confirmation did not send one correlated request')
+state.callbacks[203](nil, 203, result('reset', 2, true, 'ok', {
+    level = 1, levelExperience = 100, levelExperienceRequired = 100, levelProgress = 1,
+    availablePoints = 1, totalSpentPoints = 0, reset = true,
+}))
+requireValue(controller.launcher.visible and controller.launcher.badge.text == '1',
+    'Ascension reset result did not restore the viewport launcher')
 
+controller:onGameEnd()
+requireValue(prompt.destroyed and not ui.visible and not controller.snapshot and
+    not controller.availablePoints and not controller.launcher.visible,
+    'Ascension logout retained its view, point state, launcher, or reset confirmation')
+
+local launcher = controller.launcher
 controller:onTerminate()
-requireValue(controller.button == nil, 'Ascension termination retained its top-menu button')
+requireValue(controller.launcher == nil and launcher.destroyed,
+    'Ascension termination retained its viewport launcher')
 
 print('Xibat Ascension tests passed')
