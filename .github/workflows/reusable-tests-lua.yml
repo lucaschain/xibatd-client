@@ -46,3 +46,4 @@ jobs:
           luajit tests/xibat_guidance_test.lua "$PWD"
           luajit tests/xibat_quests_test.lua "$PWD"
           luajit tests/xibat_shop_test.lua "$PWD"
+          luajit tests/xibat_updater_test.lua "$PWD"

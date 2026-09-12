@@ -40,6 +40,7 @@
 
 #include <cppcodec/base64_rfc4648.hpp>
 #include <openssl/evp.h>
+#include <openssl/x509.h>
 
 #include "framework/core/graphicalapplication.h"
 #include "framework/core/resourcemanager.h"
@@ -331,4 +332,38 @@ std::string Crypt::sha256(const std::string& decoded_string)
         ss << std::setw(2) << static_cast<int>(digest[i]);
 
     return ss.str();
+}
+
+bool Crypt::verifyClientUpdateSignature(const std::string& keyId, const std::string& payloadBase64, const std::string& signatureBase64)
+{
+    static constexpr std::string_view trustedKeyId = "xibat-client-2026-01";
+    static constexpr std::string_view trustedPublicKeyDer = "MCowBQYDK2VwAyEAHmXfV/TVMnijkVUC09VHaB+VqueWPpPbJqQ8zsL9N6w=";
+
+    if (keyId != trustedKeyId)
+        return false;
+
+    const auto publicKeyDer = base64Decode(trustedPublicKeyDer);
+    const auto payload = base64Decode(payloadBase64);
+    const auto signature = base64Decode(signatureBase64);
+    if (publicKeyDer.empty() || payload.empty() || signature.size() != 64)
+        return false;
+
+    const auto* keyData = reinterpret_cast<const unsigned char*>(publicKeyDer.data());
+    EVP_PKEY* publicKey = d2i_PUBKEY(nullptr, &keyData, static_cast<long>(publicKeyDer.size()));
+    if (!publicKey)
+        return false;
+
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    const bool valid = context &&
+                       EVP_DigestVerifyInit(context, nullptr, nullptr, nullptr, publicKey) == 1 &&
+                       EVP_DigestVerify(
+                           context,
+                           reinterpret_cast<const unsigned char*>(signature.data()),
+                           signature.size(),
+                           reinterpret_cast<const unsigned char*>(payload.data()),
+                           payload.size()
+                       ) == 1;
+    EVP_MD_CTX_free(context);
+    EVP_PKEY_free(publicKey);
+    return valid;
 }

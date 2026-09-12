@@ -89,6 +89,7 @@ public:
     std::string fileChecksum(const std::string& path);
     std::string fileSha256(const std::string& path);
     std::string fileSha256InWorkDir(const std::string& path);
+    int64_t fileSizeInWorkDir(const std::string& path);
     bool writeDownloadedFile(const std::string& path, std::string destinationPath, bool decompressLzma);
     bool writeDownloadedFileToWorkDir(const std::string& path, std::string destinationPath, bool decompressLzma);
     bool extractDownloadedArchive(const std::string& path, std::string destinationPath, const std::string& entryPrefix, bool stripPrefix);

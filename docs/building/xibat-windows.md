@@ -20,6 +20,10 @@ The script:
 - Stages the executable, Lua/OTUI modules, configuration, and Tibia 1098 assets.
 - Atomically deploys the runnable client to `D:\XibaTD` by default.
 
+The release workflow uses `build-windows.ps1 -ReleaseOnly` to compile the official
+executable without requiring locally installed Tibia assets or deploying a runnable
+tree. This mode is intended for CI packaging; normal local builds should omit it.
+
 ## Prerequisites
 
 Install the Windows compiler and vcpkg prerequisites described in

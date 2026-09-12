@@ -89,6 +89,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Test Windows updater installer
+        if: matrix.type == 'CMake'
+        shell: pwsh
+        run: .\updater\test-install-update.ps1
+
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v9
         with:
@@ -154,11 +159,8 @@ jobs:
 
       - name: Run CMake
         if: matrix.type == 'CMake'
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: windows-release
-          buildPreset: windows-release
-          configurePresetAdditionalArgs: "['-DTOGGLE_BIN_FOLDER=ON', '-DOPTIONS_ENABLE_IPO=OFF', '-DOTCLIENT_BUILD_TESTS=OFF']"
+        shell: pwsh
+        run: .\build-windows.ps1 -ReleaseOnly
 
       - name: Upload artifacts (CMake)
         if: matrix.type == 'CMake' && !inputs.release_only

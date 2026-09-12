@@ -70,6 +70,7 @@ public:
 
     std::string crc32(const std::string& decoded_string, bool upperCase);
     std::string sha256(const std::string& decoded_string);
+    bool verifyClientUpdateSignature(const std::string& keyId, const std::string& payloadBase64, const std::string& signatureBase64);
 
 private:
     std::string _encrypt(const std::string& decrypted_string, bool useMachineUUID);

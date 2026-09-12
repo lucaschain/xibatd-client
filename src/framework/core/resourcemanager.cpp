@@ -919,6 +919,13 @@ std::string ResourceManager::fileSha256InWorkDir(const std::string& path)
     }
 }
 
+int64_t ResourceManager::fileSizeInWorkDir(const std::string& path)
+{
+    std::error_code error;
+    const auto size = std::filesystem::file_size(std::filesystem::path(m_workDir) / normalizeVirtualPath(path), error);
+    return error ? -1 : static_cast<int64_t>(size);
+}
+
 bool ResourceManager::writeDownloadedFile(const std::string& path, std::string destinationPath, const bool decompressLzma)
 {
     const auto downloadedFile = getDownloadedFile(path);

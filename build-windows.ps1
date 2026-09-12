@@ -21,6 +21,7 @@ param(
     [string]$VcpkgRoot = $env:VCPKG_ROOT,
     [int]$Jobs = 0,
     [switch]$UIOnly,
+    [switch]$ReleaseOnly,
     [switch]$Run
 )
 
@@ -105,6 +106,10 @@ if (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
 }
 $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 
+if ($UIOnly -and $ReleaseOnly) {
+    throw 'UIOnly and ReleaseOnly cannot be used together.'
+}
+
 if ($UIOnly) {
     if (Get-Process otclient -ErrorAction SilentlyContinue) {
         throw 'Stop otclient.exe before deploying UI files.'
@@ -151,10 +156,12 @@ foreach ($commandName in 'cmake.exe', 'ninja.exe', 'cl.exe', 'robocopy.exe') {
 }
 
 $requiredAssets = @('Tibia.dat', 'Tibia.spr')
-foreach ($asset in $requiredAssets) {
-    $assetPath = Join-Path $AssetsPath $asset
-    if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
-        throw "Missing Xibat 1098 asset: $assetPath"
+if (-not $ReleaseOnly) {
+    foreach ($asset in $requiredAssets) {
+        $assetPath = Join-Path $AssetsPath $asset
+        if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+            throw "Missing Xibat 1098 asset: $assetPath"
+        }
     }
 }
 
@@ -188,15 +195,21 @@ if (-not (Test-Path -LiteralPath $builtExecutable -PathType Leaf)) {
     throw "Build completed without producing the expected executable: $builtExecutable"
 }
 
+if ($ReleaseOnly) {
+    Write-Host "Windows release executable built at $builtExecutable"
+    return
+}
+
 $stagePath = "$OutputPath.__staging"
 $backupPath = "$OutputPath.__previous"
 Remove-Item -LiteralPath $stagePath -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $backupPath -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $stagePath | Out-Null
 
-foreach ($directory in 'data', 'mods', 'modules') {
+foreach ($directory in 'data', 'mods', 'modules', 'updater') {
     Copy-DirectoryTree (Join-Path $sourceRoot $directory) (Join-Path $stagePath $directory)
 }
+Remove-Item -LiteralPath (Join-Path $stagePath 'updater\test-install-update.ps1') -Force -ErrorAction SilentlyContinue
 
 $stagedAssets = Join-Path $stagePath 'data\things\1098'
 New-Item -ItemType Directory -Path $stagedAssets -Force | Out-Null

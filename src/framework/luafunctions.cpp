@@ -165,11 +165,14 @@ void Application::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_crypt", "getMachineUUID", &Crypt::getMachineUUID, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "encrypt", &Crypt::encrypt, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "decrypt", &Crypt::decrypt, &g_crypt);
+    g_lua.bindSingletonFunction("g_crypt", "base64Encode", &Crypt::base64Encode, &g_crypt);
+    g_lua.bindSingletonFunction("g_crypt", "base64Decode", &Crypt::base64Decode, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "rsaSetPublicKey", &Crypt::rsaSetPublicKey, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "rsaSetPrivateKey", &Crypt::rsaSetPrivateKey, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "rsaGetSize", &Crypt::rsaGetSize, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "crc32", &Crypt::crc32, &g_crypt);
     g_lua.bindSingletonFunction("g_crypt", "sha256", &Crypt::sha256, &g_crypt);
+    g_lua.bindSingletonFunction("g_crypt", "verifyClientUpdateSignature", &Crypt::verifyClientUpdateSignature, &g_crypt);
 
     // Clock
     g_lua.registerSingletonClass("g_clock");
@@ -276,6 +279,7 @@ void Application::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_resources", "fileChecksum", &ResourceManager::fileChecksum, &g_resources);
     g_lua.bindSingletonFunction("g_resources", "fileSha256", &ResourceManager::fileSha256, &g_resources);
     g_lua.bindSingletonFunction("g_resources", "fileSha256InWorkDir", &ResourceManager::fileSha256InWorkDir, &g_resources);
+    g_lua.bindSingletonFunction("g_resources", "fileSizeInWorkDir", &ResourceManager::fileSizeInWorkDir, &g_resources);
     g_lua.bindSingletonFunction("g_resources", "writeDownloadedFile", &ResourceManager::writeDownloadedFile, &g_resources);
     g_lua.bindSingletonFunction("g_resources", "writeDownloadedFileToWorkDir", &ResourceManager::writeDownloadedFileToWorkDir, &g_resources);
     g_lua.bindSingletonFunction("g_resources", "extractDownloadedArchive", &ResourceManager::extractDownloadedArchive, &g_resources);
