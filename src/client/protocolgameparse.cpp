@@ -4480,6 +4480,10 @@ ItemPtr ProtocolGame::getItem(const InputMessagePtr& msg, int id)
         item->setTooltip(msg->getString());
     }
 
+    if (g_game.getFeature(Otc::GameTurretRuneLevel)) {
+        item->setRuneLevel(static_cast<int32_t>(msg->getU32()));
+    }
+
     return item;
 }
 

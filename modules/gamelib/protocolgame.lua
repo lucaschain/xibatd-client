@@ -4,6 +4,10 @@ local extendedJSONCallbacks = {}
 local maxPacketSize = 65000
 local maxJSONSize = 1024 * 1024
 
+function ProtocolGame:getLoginExtendedData()
+    return 'XibatRune1'
+end
+
 local function decodeExtendedJSON(opcode, buffer, callback, protocol)
     local status, data = pcall(json.decode, buffer)
     if not status then

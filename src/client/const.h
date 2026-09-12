@@ -667,6 +667,7 @@ namespace Otc
         GameProficiency = 135,
         GameTacticsWithoutFightMode = 136,
         GameDoubleSoul = 137,
+        GameTurretRuneLevel = 138,
         LastGameFeature
     };
 

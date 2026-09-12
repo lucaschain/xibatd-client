@@ -35,6 +35,7 @@ local function clearSingleActionCache(button, barID, buttonID)
     button.cache.itemId = 0
     button.cache.actionType = 0
     button.cache.upgradeTier = 0
+    button.cache.runeLevel = nil
     button.cache.smartMode = false
 
     local entry = ApiJson.getMapping(tonumber(barID), tonumber(buttonID))
@@ -45,6 +46,7 @@ local function clearSingleActionCache(button, barID, buttonID)
         actionsetting["useObject"] = nil
         actionsetting["useType"] = nil
         actionsetting["upgradeTier"] = nil
+        actionsetting["runeLevel"] = nil
         actionsetting["useEquipSmartMode"] = nil
     end
 end
@@ -242,6 +244,9 @@ local function renderSlotOnWidget(widget, slotData, isMainButton)
         widget.item:setOn(true)
         widget.cache.itemId = slotData["useObject"]
         widget.cache.upgradeTier = slotData["upgradeTier"] or 0
+        widget.cache.runeLevel = slotData["runeLevel"]
+        widget.item:getItem():setRuneLevel(widget.cache.runeLevel or -1)
+        widget.item:refreshTurretRuneLevel()
         widget.cache.smartMode = slotData["useEquipSmartMode"] or false
         local useTypeName = localGetActionName(slotData["useType"]) or "Use"
         widget.cache.actionType = UseTypes[useTypeName] or UseTypes["Use"]
@@ -342,7 +347,8 @@ function updateMultiButtonState(button)
     end
 
     -- Early return: already displaying this useObject action
-    if action["useObject"] and button.cache.itemId == action["useObject"] then
+    if action["useObject"] and button.cache.itemId == action["useObject"] and
+        button.cache.runeLevel == action["runeLevel"] then
         local useTypeName = localGetActionName(action["useType"]) or "Use"
         if button.cache.actionType == (UseTypes[useTypeName] or UseTypes["Use"]) then
             return
@@ -448,8 +454,8 @@ function assignMultiText(button, multiButtonIndex)
     assignText(button, multiButtonIndex)
 end
 
-function assignMultiItem(button, multiButtonIndex, itemId, itemTier, dragEvent)
-    assignItem(button, itemId, itemTier or 0, dragEvent, multiButtonIndex)
+function assignMultiItem(button, multiButtonIndex, itemId, itemTier, dragEvent, runeLevel)
+    assignItem(button, itemId, itemTier or 0, dragEvent, multiButtonIndex, runeLevel)
 end
 
 -- /*=============================================
@@ -713,14 +719,16 @@ function assignMultiAction(button, skipPrefill)
                 local useType = getActionName(button.cache.actionType) or "Use"
                 local upgradeTier = button.cache.upgradeTier or 0
                 local smartMode = button.cache.smartMode or false
+                local runeLevel = button.cache.runeLevel
                 button.cache.multiActions[1] = {
                     useObject = itemId,
                     useType = useType,
                     upgradeTier = upgradeTier,
-                    useEquipSmartMode = smartMode
+                    useEquipSmartMode = smartMode,
+                    runeLevel = runeLevel
                 }
                 ApiJson.createOrUpdateMultiAction(tonumber(barID), tonumber(buttonID), 1, useType, itemId, upgradeTier,
-                    smartMode)
+                    smartMode, runeLevel)
                 clearSingleActionCache(button, barID, buttonID)
                 prefilled = true
             end
@@ -913,12 +921,14 @@ function onDragMultiActionItemLeave(self, mousePos, actionButton)
         local actionTypeName = localGetActionName(destButton.cache.actionType)
         if actionTypeName then
             ApiJson.createOrUpdateMultiAction(tonumber(barID), tonumber(buttonID), sourceIndex, actionTypeName,
-                destButton.cache.itemId, destButton.cache.upgradeTier or 0, destButton.cache.smartMode or false)
+                destButton.cache.itemId, destButton.cache.upgradeTier or 0, destButton.cache.smartMode or false,
+                destButton.cache.runeLevel)
             parentButton.cache.multiActions[sourceIndex] = {
                 useObject = destButton.cache.itemId,
                 useType = actionTypeName,
                 upgradeTier = destButton.cache.upgradeTier or 0,
-                useEquipSmartMode = destButton.cache.smartMode or false
+                useEquipSmartMode = destButton.cache.smartMode or false,
+                runeLevel = destButton.cache.runeLevel
             }
         end
     elseif destButton.cache.param and destButton.cache.param ~= "" then
@@ -938,7 +948,7 @@ function onDragMultiActionItemLeave(self, mousePos, actionButton)
         elseif sourceData["useObject"] then
             local actionTypeName = localGetActionName(sourceData["useType"]) or "Use"
             ApiJson.createOrUpdateAction(tonumber(dBarID), tonumber(dButtonID), actionTypeName, sourceData["useObject"],
-                sourceData["upgradeTier"] or 0)
+                sourceData["upgradeTier"] or 0, sourceData["runeLevel"])
         end
     end
 

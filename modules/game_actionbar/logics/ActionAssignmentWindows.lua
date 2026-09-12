@@ -319,7 +319,7 @@ local function canEquipItem(item)
     return false
 end
 
-function assignItem(button, itemId, itemTier, dragEvent, multiSlotIndex)
+function assignItem(button, itemId, itemTier, dragEvent, multiSlotIndex, runeLevel)
     if not isLoaded then
         return true
     end
@@ -330,6 +330,14 @@ function assignItem(button, itemId, itemTier, dragEvent, multiSlotIndex)
         button = parent:getChildById(id)
         if not button or not button.item then
             return
+        end
+    end
+    if runeLevel == nil and button.cache then
+        if multiSlotIndex and button.cache.multiActions and button.cache.multiActions[multiSlotIndex] and
+            button.cache.multiActions[multiSlotIndex].useObject == itemId then
+            runeLevel = button.cache.multiActions[multiSlotIndex].runeLevel
+        elseif not multiSlotIndex and button.cache.itemId == itemId then
+            runeLevel = button.cache.runeLevel
         end
     end
     local item = button.item:getItem()
@@ -388,6 +396,10 @@ function assignItem(button, itemId, itemTier, dragEvent, multiSlotIndex)
         fromSelect = button.item:getItemId() > 0 and button.item:getItemId() ~= itemId
     end
     itemWidget:setItemId(itemId)
+    if runeLevel ~= nil then
+        itemWidget:getItem():setRuneLevel(runeLevel)
+        itemWidget:refreshTurretRuneLevel()
+    end
     if not item or item:getId() == 0 then
         item = itemWidget:getItem()
     end
@@ -521,12 +533,12 @@ function assignItem(button, itemId, itemTier, dragEvent, multiSlotIndex)
         end
         if multiSlotIndex then
             if not button.cache.multiActions then button.cache.multiActions = {{}, {}, {}} end
-            button.cache.multiActions[multiSlotIndex] = {useObject = itemId, useType = selected, upgradeTier = itemTier, useEquipSmartMode = false}
-            ApiJson.createOrUpdateMultiAction(tonumber(barID), tonumber(buttonID), multiSlotIndex, selected, itemId, itemTier, false)
+            button.cache.multiActions[multiSlotIndex] = {useObject = itemId, useType = selected, upgradeTier = itemTier, useEquipSmartMode = false, runeLevel = runeLevel}
+            ApiJson.createOrUpdateMultiAction(tonumber(barID), tonumber(buttonID), multiSlotIndex, selected, itemId, itemTier, false, runeLevel)
             if updateMultiButtonState then updateMultiButtonState(button) end
             if assignMultiAction then assignMultiAction(button, true) end
         else
-            ApiJson.createOrUpdateAction(tonumber(barID), tonumber(buttonID), selected, itemId, itemTier)
+            ApiJson.createOrUpdateAction(tonumber(barID), tonumber(buttonID), selected, itemId, itemTier, runeLevel)
             updateButton(button)
         end
 
@@ -697,13 +709,19 @@ function onAssignItem(self, mousePosition, mouseButton, button, multiSlotIndex)
 
     local itemId = 0
     local itemTier = 0
+    local runeLevel = nil
     if clickedWidget:getClassName() == 'UIItem' and not clickedWidget:isVirtual() and clickedWidget:getItem() then
         itemId = clickedWidget:getItem():getId()
         itemTier = clickedWidget:getItem():getTier()
+        runeLevel = clickedWidget:getItem():isTurretRune() and clickedWidget:getItem():getRuneLevel() or nil
     elseif clickedWidget:getClassName() == 'UIGameMap' then
         local tile = clickedWidget:getTile(mousePosition)
         if tile then
-            itemId = tile:getTopUseThing():getId()
+            local mapItem = tile:getTopUseThing()
+            if mapItem and mapItem:isItem() then
+                itemId = mapItem:getId()
+                runeLevel = mapItem:isTurretRune() and mapItem:getRuneLevel() or nil
+            end
         end
     end
 
@@ -712,7 +730,7 @@ function onAssignItem(self, mousePosition, mouseButton, button, multiSlotIndex)
         modules.game_textmessage.displayFailureMessage(tr('Invalid object'))
         return true
     end
-    assignItem(button, itemId, itemTier, false, multiSlotIndex)
+    assignItem(button, itemId, itemTier, false, multiSlotIndex, runeLevel)
 end
 
 -- /*=============================================

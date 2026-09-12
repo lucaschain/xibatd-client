@@ -90,6 +90,7 @@ public:
     void setDecaying(bool decaying);
     void setCharges(const uint32_t charges) { m_charges = charges; }
     void setTier(const uint8_t tier) { m_tier = tier; }
+    void setRuneLevel(const int32_t runeLevel) { m_runeLevel = runeLevel; }
 
     int getCountOrSubType() { return m_countOrSubType; }
     int getSubType();
@@ -100,6 +101,8 @@ public:
     bool isDecaying() const { return m_decaying; }
     uint32_t getCharges() { return m_charges; }
     uint8_t getTier() { return m_tier; }
+    int32_t getRuneLevel() const { return m_runeLevel; }
+    bool isTurretRune() const { return m_runeLevel >= 0; }
 
     bool isValid() { return getThingType() != nullptr; }
 
@@ -181,6 +184,7 @@ private:
     uint32_t m_charges{ 0 };
     uint8_t m_tier{ 0 };
     uint8_t m_phase{ 0 };
+    int32_t m_runeLevel{ -1 };
 
     Color m_color{ Color::white };
 

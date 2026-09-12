@@ -82,7 +82,7 @@ function persistMultiSlot(barId, buttonId, slotIndex, slotData)
         local useTypeName = resolveMultiUseType(slotData["useType"])
         ApiJson.createOrUpdateMultiAction(barId, buttonId, slotIndex,
             useTypeName, slotData["useObject"],
-            slotData["upgradeTier"] or 0, slotData["useEquipSmartMode"] or false)
+            slotData["upgradeTier"] or 0, slotData["useEquipSmartMode"] or false, slotData["runeLevel"])
     end
 end
 
@@ -341,13 +341,19 @@ function onExecuteAction(button, isPress)
     if action == UseTypes["Use"] and button.item then
         if (button.item:getItem():isContainer()) then
             g_game.closeContainerByItemId(button.item:getItemId())
+        elseif button.cache.runeLevel ~= nil then
+            g_game.useInventoryRune(button.item:getItemId(), button.cache.runeLevel)
         else
             g_game.useInventoryItem(button.item:getItemId())
         end
     end
 
     if action == UseTypes["UseOnYourself"] and button.item then
-        g_game.useInventoryItemWith(button.item:getItemId(), player, button.item:getItemSubType() or -1)
+        if button.cache.runeLevel ~= nil then
+            g_game.useInventoryRuneWith(button.item:getItemId(), button.cache.runeLevel, player)
+        else
+            g_game.useInventoryItemWith(button.item:getItemId(), player, button.item:getItemSubType() or -1)
+        end
         if not g_game.getFeature(GameEnterGameShowAppearance) then -- temp old protocol
             updateInventoryItems()
         end
@@ -602,6 +608,7 @@ function resetButtonCache(button)
     c.sendAutomatic = false
     c.actionType = 0
     c.upgradeTier = 0
+    c.runeLevel = nil
     c.hotkey = nil
     c.lastClick = 0
     c.nextDownKey = 0
@@ -810,7 +817,8 @@ function configureButtonMouseRelease(button)
             end)
             if button.item and button.item:getItemId() > 100 then
                 menu:addOption(tr('Edit Object'), function()
-                    assignItem(button, button.item:getItemId())
+                    assignItem(button, button.item:getItemId(), button.cache.upgradeTier, nil, nil,
+                        button.cache.runeLevel)
                 end)
             else
                 menu:addOption(tr('Assign Object'), function()
@@ -1078,6 +1086,9 @@ function updateButton(button)
 
         button.cache.itemId = button.item:getItemId()
         button.cache.upgradeTier = buttonData["actionsetting"]["upgradeTier"]
+        button.cache.runeLevel = buttonData["actionsetting"]["runeLevel"]
+        button.item:getItem():setRuneLevel(button.cache.runeLevel or -1)
+        button.item:refreshTurretRuneLevel()
         local useTypeName = buttonData["actionsetting"]["useType"]
         button.cache.actionType = UseTypes[useTypeName] or UseTypes["Use"]
         ItemsDatabase.setTier(button.item, button.cache.upgradeTier)
@@ -1238,13 +1249,16 @@ local function resolveDroppedItemData(draggedWidget, item)
                 itemTier = draggedItem:getTier() or 0
             end
         end
-        return item, itemTier
+        local runeLevel = draggedWidget and draggedWidget.getItem and draggedWidget:getItem() and
+            draggedWidget:getItem():isTurretRune() and draggedWidget:getItem():getRuneLevel() or nil
+        return item, itemTier, runeLevel
     end
 
     if item and item.getId then
         local itemId = item:getId()
         local itemTier = item.getTier and (item:getTier() or 0) or 0
-        return itemId, itemTier
+        local runeLevel = item.isTurretRune and item:isTurretRune() and item:getRuneLevel() or nil
+        return itemId, itemTier, runeLevel
     end
 
     return nil, 0
@@ -1282,7 +1296,7 @@ function tryAssignActionButtonFromDrop(mousePos, draggedWidget, item)
         if targetIndex and targetIndex >= 1 and targetIndex <= 3 then
             local panel = clickedWidget:getParent():getParent()
             if panel and panel.button then
-                local itemId, itemTier = resolveDroppedItemData(draggedWidget, item)
+                local itemId, itemTier, runeLevel = resolveDroppedItemData(draggedWidget, item)
                 if not itemId then
                     return false
                 end
@@ -1291,7 +1305,7 @@ function tryAssignActionButtonFromDrop(mousePos, draggedWidget, item)
                     return false
                 end
                 if assignMultiItem then
-                    assignMultiItem(panel.button, targetIndex, itemId, itemTier, true)
+                    assignMultiItem(panel.button, targetIndex, itemId, itemTier, true, runeLevel)
                     return true
                 end
                 return false
@@ -1314,7 +1328,7 @@ function tryAssignActionButtonFromDrop(mousePos, draggedWidget, item)
         return false
     end
 
-    local itemId, itemTier = resolveDroppedItemData(draggedWidget, item)
+    local itemId, itemTier, runeLevel = resolveDroppedItemData(draggedWidget, item)
     if not itemId then
         return false
     end
@@ -1324,7 +1338,7 @@ function tryAssignActionButtonFromDrop(mousePos, draggedWidget, item)
         return false
     end
 
-    assignItem(button, itemId, itemTier)
+    assignItem(button, itemId, itemTier, nil, nil, runeLevel)
     return true
 end
 
@@ -1404,14 +1418,16 @@ function onDragItemLeave(self, mousePos, button)
                 elseif button.cache.itemId and button.cache.itemId > 100 then
                     local useTypeName = resolveMultiUseType(button.cache.actionType)
                     ApiJson.createOrUpdateMultiAction(tonumber(tBarID), tonumber(tButtonID), targetIndex, useTypeName,
-                        button.cache.itemId, button.cache.upgradeTier or 0, button.cache.smartMode or false)
+                        button.cache.itemId, button.cache.upgradeTier or 0, button.cache.smartMode or false,
+                        button.cache.runeLevel)
                     targetButton.cache = getButtonCache(targetButton)
                     targetButton.cache.multiActions = targetButton.cache.multiActions or {{}, {}, {}}
                     targetButton.cache.multiActions[targetIndex] = {
                         useObject = button.cache.itemId,
                         useType = useTypeName,
                         upgradeTier = button.cache.upgradeTier or 0,
-                        useEquipSmartMode = button.cache.smartMode or false
+                        useEquipSmartMode = button.cache.smartMode or false,
+                        runeLevel = button.cache.runeLevel
                     }
                 else
                     resetDragWidget(self, button)
@@ -1521,7 +1537,7 @@ function onDragItemLeave(self, mousePos, button)
         ApiJson.createOrUpdateSpecialAction(tonumber(destBarID), tonumber(destButtonID), button.cache.specialAction)
     elseif itemId ~= 0 then
         ApiJson.createOrUpdateAction(tonumber(destBarID), tonumber(destButtonID),
-            getActionName(button.cache.actionType), itemId, button.cache.upgradeTier)
+            getActionName(button.cache.actionType), itemId, button.cache.upgradeTier, button.cache.runeLevel)
     elseif button.cache.isPassive then
         ApiJson.createOrUpdatePassive(tonumber(destBarID), tonumber(destButtonID), 1)
     end
@@ -1539,7 +1555,8 @@ function onDragItemLeave(self, mousePos, button)
                 destButtonCache.specialAction)
         elseif destButtonCache.itemId ~= 0 then
             ApiJson.createOrUpdateAction(tonumber(draggedBarID), tonumber(draggedButtonID),
-                getActionName(destButtonCache.actionType), destButtonCache.itemId, destButtonCache.upgradeTier)
+                getActionName(destButtonCache.actionType), destButtonCache.itemId, destButtonCache.upgradeTier,
+                destButtonCache.runeLevel)
         elseif destButtonCache.isPassive then
             ApiJson.createOrUpdatePassive(tonumber(draggedBarID), tonumber(draggedButtonID), 1)
         end

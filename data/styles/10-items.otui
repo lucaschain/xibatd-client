@@ -21,6 +21,22 @@ Item < UIItem
     focusable: false
     visible: false
     image-smooth: true
+
+TurretRuneLevelOverlay < UILabel
+  height: 9
+  anchors.left: parent.left
+  anchors.right: parent.right
+  anchors.bottom: parent.bottom
+  margin-left: 1
+  margin-right: 1
+  margin-bottom: 1
+  font: verdana-8px-rounded
+  color: #ffe28aff
+  background-color: #00000099
+  text-align: center
+  phantom: true
+  focusable: false
+  visible: false
     
 MainInventoryItem < UIWidget
   image-source: /images/inventory/containerslot

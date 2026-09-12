@@ -774,6 +774,15 @@ function g_game.useInventoryItem(itemId) end
 ---@param toThing Thing
 function g_game.useInventoryItemWith(itemId, toThing) end
 
+---@param itemId integer
+---@param runeLevel integer
+function g_game.useInventoryRune(itemId, runeLevel) end
+
+---@param itemId integer
+---@param runeLevel integer
+---@param toThing Thing
+function g_game.useInventoryRuneWith(itemId, runeLevel, toThing) end
+
 ---@param itemId number
 ---@param subType integer
 ---@return Item | nil
@@ -2188,6 +2197,9 @@ function Item:setCount(count) end
 ---@param tooltip string
 function Item:setTooltip(tooltip) end
 
+---@param runeLevel integer
+function Item:setRuneLevel(runeLevel) end
+
 ---@return integer
 function Item:getCount() end
 
@@ -2202,6 +2214,12 @@ function Item:getId() end
 
 ---@return string
 function Item:getTooltip() end
+
+---@return integer
+function Item:getRuneLevel() end
+
+---@return boolean
+function Item:isTurretRune() end
 
 ---@return boolean
 function Item:isStackable() end

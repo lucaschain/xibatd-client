@@ -305,6 +305,7 @@ function save()
             autoSend = child.autoSend,
             itemId = child.itemId,
             subType = child.subType,
+            runeLevel = child.runeLevel,
             useType = child.useType,
             value = child.value,
             action = child.action
@@ -341,6 +342,7 @@ function onActionChange(comboBox, option)
         if action > 0 then
             currentHotkeyLabel.action = action
             currentHotkeyLabel.itemId = nil
+            currentHotkeyLabel.runeLevel = nil
             currentHotkeyLabel.value = nil
             currentHotkeyLabel.autoSend = nil
         else
@@ -372,6 +374,7 @@ function onChooseItemMouseRelease(self, mousePosition, mouseButton)
 
     if item and currentHotkeyLabel then
         currentHotkeyLabel.itemId = item:getId()
+        currentHotkeyLabel.runeLevel = item:isTurretRune() and item:getRuneLevel() or nil
         if item:isFluidContainer() then
             currentHotkeyLabel.subType = item:getSubType()
         end
@@ -415,6 +418,7 @@ end
 function clearObject()
     currentHotkeyLabel.itemId = nil
     currentHotkeyLabel.subType = nil
+    currentHotkeyLabel.runeLevel = nil
     currentHotkeyLabel.useType = nil
     currentHotkeyLabel.autoSend = nil
     currentHotkeyLabel.value = nil
@@ -471,6 +475,7 @@ function addKeyCombo(keyCombo, keySettings, focus)
             hotkeyLabel.autoSend = toboolean(keySettings.autoSend)
             hotkeyLabel.itemId = tonumber(keySettings.itemId)
             hotkeyLabel.subType = tonumber(keySettings.subType)
+            hotkeyLabel.runeLevel = keySettings.runeLevel ~= nil and tonumber(keySettings.runeLevel) or nil
             hotkeyLabel.useType = tonumber(keySettings.useType)
             hotkeyLabel.action = tonumber(keySettings.action)
             if keySettings.value then
@@ -481,6 +486,7 @@ function addKeyCombo(keyCombo, keySettings, focus)
             hotkeyLabel.autoSend = false
             hotkeyLabel.itemId = nil
             hotkeyLabel.subType = nil
+            hotkeyLabel.runeLevel = nil
             hotkeyLabel.useType = nil
             hotkeyLabel.action = nil
             hotkeyLabel.value = ''
@@ -544,7 +550,7 @@ function doKeyCombo(keyCombo)
             end, 1)
         end
     else
-        executeHotkeyItem(hotKey.useType, hotKey.itemId, hotKey.subType)
+        executeHotkeyItem(hotKey.useType, hotKey.itemId, hotKey.subType, hotKey.runeLevel)
     end
 end
 
@@ -554,7 +560,15 @@ function toggleChaseMode()
     g_game.setChaseMode(nextMode)
 end
 
-function executeHotkeyItem(action, itemId, subType)
+function executeHotkeyItem(action, itemId, subType, runeLevel)
+    local function createHotkeyItem()
+        local item = Item.create(itemId)
+        if runeLevel ~= nil then
+            item:setRuneLevel(runeLevel)
+        end
+        return item
+    end
+
     local function get_use_thing_under_cursor()
         local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
         if not mapPanel then
@@ -584,7 +598,7 @@ function executeHotkeyItem(action, itemId, subType)
             return nil
         end
 
-        local virtualItem = Item.create(itemId)
+        local virtualItem = createHotkeyItem()
         if virtualItem:isFluidContainer() or virtualItem:isMultiUse() then
             return tile:getTopMultiUseThing()
         end
@@ -592,6 +606,10 @@ function executeHotkeyItem(action, itemId, subType)
     end
 
     if action == HOTKEY_MANAGER_USE then
+        if runeLevel ~= nil then
+            g_game.useInventoryRune(itemId, runeLevel)
+            return
+        end
         if g_game.getClientVersion() < 780 or subType then
             local item = g_game.findPlayerItem(itemId, subType or -1)
             if item then
@@ -601,6 +619,10 @@ function executeHotkeyItem(action, itemId, subType)
             g_game.useInventoryItem(itemId)
         end
     elseif action == HOTKEY_MANAGER_USEONSELF then
+        if runeLevel ~= nil then
+            g_game.useInventoryRuneWith(itemId, runeLevel, g_game.getLocalPlayer())
+            return
+        end
         if g_game.getClientVersion() < 780 or subType then
             local item = g_game.findPlayerItem(itemId, subType or -1)
             if item then
@@ -612,7 +634,7 @@ function executeHotkeyItem(action, itemId, subType)
     elseif action == HOTKEY_MANAGER_USEONTARGET then
         local attackingCreature = g_game.getAttackingCreature()
         if not attackingCreature then
-            local item = Item.create(itemId)
+            local item = createHotkeyItem()
             if g_game.getClientVersion() < 780 or subType then
                 local tmpItem = g_game.findPlayerItem(itemId, subType or -1)
                 if not tmpItem then
@@ -628,7 +650,9 @@ function executeHotkeyItem(action, itemId, subType)
         if not attackingCreature:getTile() then
             return
         end
-        if g_game.getClientVersion() < 780 or subType then
+        if runeLevel ~= nil then
+            g_game.useInventoryRuneWith(itemId, runeLevel, attackingCreature)
+        elseif g_game.getClientVersion() < 780 or subType then
             local item = g_game.findPlayerItem(itemId, subType or -1)
             if item then
                 g_game.useWith(item, attackingCreature)
@@ -637,7 +661,7 @@ function executeHotkeyItem(action, itemId, subType)
             g_game.useInventoryItemWith(itemId, attackingCreature)
         end
     elseif action == HOTKEY_MANAGER_USEWITH then
-        local item = Item.create(itemId)
+        local item = createHotkeyItem()
         if g_game.getClientVersion() < 780 or subType then
             local tmpItem = g_game.findPlayerItem(itemId, subType or -1)
             if not tmpItem then
@@ -649,7 +673,7 @@ function executeHotkeyItem(action, itemId, subType)
     elseif action == HOTKEY_MANAGER_USEATCURSOR then
         local useThing = get_use_thing_under_cursor()
         if not useThing then
-            local item = Item.create(itemId)
+            local item = createHotkeyItem()
             if g_game.getClientVersion() < 780 or subType then
                 local tmpItem = g_game.findPlayerItem(itemId, subType or -1)
                 if not tmpItem then
@@ -661,7 +685,9 @@ function executeHotkeyItem(action, itemId, subType)
             return
         end
 
-        if g_game.getClientVersion() < 780 or subType then
+        if runeLevel ~= nil then
+            g_game.useInventoryRuneWith(itemId, runeLevel, useThing)
+        elseif g_game.getClientVersion() < 780 or subType then
             local item = g_game.findPlayerItem(itemId, subType or -1)
             if item then
                 g_game.useWith(item, useThing)
@@ -729,6 +755,8 @@ function updateHotkeyForm(reset, dontUpdateCombo)
             selectObjectButton:disable()
             clearObjectButton:enable()
             currentItemPreview:setItemId(currentHotkeyLabel.itemId)
+            currentItemPreview:getItem():setRuneLevel(currentHotkeyLabel.runeLevel or -1)
+            currentItemPreview:refreshTurretRuneLevel()
             if currentHotkeyLabel.subType then
                 currentItemPreview:setItemSubType(currentHotkeyLabel.subType)
             end

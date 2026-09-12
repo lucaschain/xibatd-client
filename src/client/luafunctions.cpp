@@ -260,6 +260,8 @@ void Client::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_game", "useWith", &Game::useWith, &g_game);
     g_lua.bindSingletonFunction("g_game", "useInventoryItem", &Game::useInventoryItem, &g_game);
     g_lua.bindSingletonFunction("g_game", "useInventoryItemWith", &Game::useInventoryItemWith, &g_game);
+    g_lua.bindSingletonFunction("g_game", "useInventoryRune", &Game::useInventoryRune, &g_game);
+    g_lua.bindSingletonFunction("g_game", "useInventoryRuneWith", &Game::useInventoryRuneWith, &g_game);
     g_lua.bindSingletonFunction("g_game", "findItemInContainers", &Game::findItemInContainers, &g_game);
     g_lua.bindSingletonFunction("g_game", "open", &Game::open, &g_game);
     g_lua.bindSingletonFunction("g_game", "openParent", &Game::openParent, &g_game);
@@ -817,6 +819,7 @@ void Client::registerLuaFunctions()
     g_lua.bindClassMemberFunction<Item>("setCount", &Item::setCount);
     g_lua.bindClassMemberFunction<Item>("setTooltip", &Item::setTooltip);
     g_lua.bindClassMemberFunction<Item>("setTier", &Item::setTier);
+    g_lua.bindClassMemberFunction<Item>("setRuneLevel", &Item::setRuneLevel);
 
     g_lua.bindClassMemberFunction<Item>("getCount", &Item::getCount);
     g_lua.bindClassMemberFunction<Item>("getSubType", &Item::getSubType);
@@ -826,6 +829,8 @@ void Client::registerLuaFunctions()
     g_lua.bindClassMemberFunction<Item>("getDurationTime", &Item::getDurationTime);
     g_lua.bindClassMemberFunction<Item>("getTier", &Item::getTier);
     g_lua.bindClassMemberFunction<Item>("getCharges", &Item::getCharges);
+    g_lua.bindClassMemberFunction<Item>("getRuneLevel", &Item::getRuneLevel);
+    g_lua.bindClassMemberFunction<Item>("isTurretRune", &Item::isTurretRune);
 
     g_lua.bindClassMemberFunction<Item>("isStackable", &Item::isStackable);
     g_lua.bindClassMemberFunction<Item>("isMarketable", &Item::isMarketable);

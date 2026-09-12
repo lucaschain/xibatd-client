@@ -610,7 +610,7 @@ function ApiJson.createOrUpdateText(barId, buttonId, text, sendAutomatic)
     }
 end
 
-function ApiJson.createOrUpdateAction(barId, buttonId, useMode, itemId, itemTier)
+function ApiJson.createOrUpdateAction(barId, buttonId, useMode, itemId, itemTier, runeLevel)
     barId = tonumber(barId)
     buttonId = tonumber(buttonId)
     if not barId or not buttonId then
@@ -621,7 +621,8 @@ function ApiJson.createOrUpdateAction(barId, buttonId, useMode, itemId, itemTier
     entry["actionsetting"] = {
         ["upgradeTier"] = itemTier,
         ["useObject"] = itemId,
-        ["useType"] = useMode
+        ["useType"] = useMode,
+        ["runeLevel"] = runeLevel
     }
 end
 
@@ -695,7 +696,7 @@ local function ensureMultiActionsSlot(entry, slotIndex)
     return slotIndex, multiActions
 end
 
-function ApiJson.createOrUpdateMultiAction(barId, buttonId, slotIndex, useMode, itemId, itemTier, smartMode)
+function ApiJson.createOrUpdateMultiAction(barId, buttonId, slotIndex, useMode, itemId, itemTier, smartMode, runeLevel)
     barId = tonumber(barId)
     buttonId = tonumber(buttonId)
     if not barId or not buttonId then
@@ -711,7 +712,8 @@ function ApiJson.createOrUpdateMultiAction(barId, buttonId, slotIndex, useMode, 
         ["useObject"] = itemId,
         ["useType"] = useMode,
         ["upgradeTier"] = itemTier,
-        ["useEquipSmartMode"] = smartMode and true or false
+        ["useEquipSmartMode"] = smartMode and true or false,
+        ["runeLevel"] = runeLevel
     }
 end
 

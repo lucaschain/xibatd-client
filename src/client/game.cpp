@@ -602,6 +602,9 @@ void Game::loginWorld(const std::string_view account, const std::string_view pas
     if (m_protocolVersion == 0)
         throw Exception("Must set a valid game protocol version before logging.");
 
+    // Server-negotiated features must not leak into a later connection.
+    disableFeature(Otc::GameTurretRuneLevel);
+
     // reset the new game state
     resetGameStates();
 
@@ -842,8 +845,11 @@ void Game::use(const ThingPtr& thing)
         return;
 
     Position pos = thing->getPosition();
-    if (!pos.isValid()) // virtual item
-        pos = Position(0xFFFF, 0, 0); // inventory item
+    if (!pos.isValid()) { // virtual item
+        const auto item = thing->isItem() ? thing->static_self_cast<Item>() : nullptr;
+        pos = item && item->isTurretRune() ? Position(0xFFFF, 0x8000 | item->getRuneLevel(), 0) :
+                                            Position(0xFFFF, 0, 0);
+    }
 
     // some items, e.g. parcel, are not set as containers but they are.
     // always try to use these items in free container slots.
@@ -870,7 +876,8 @@ void Game::useWith(const ItemPtr& item, const ThingPtr& toThing)
 
     Position pos = item->getPosition();
     if (!pos.isValid()) // virtual item
-        pos = Position(0xFFFF, 0, 0); // means that is an item in inventory
+        pos = item->isTurretRune() ? Position(0xFFFF, 0x8000 | item->getRuneLevel(), 0) :
+                                     Position(0xFFFF, 0, 0);
 
     if (toThing->isCreature())
         m_protocolGame->sendUseOnCreature(pos, item->getId(), item->getStackPos(), toThing->getId());
@@ -898,6 +905,30 @@ void Game::useInventoryItemWith(const uint16_t itemId, const ThingPtr& toThing)
     }
 
     const auto& pos = Position(0xFFFF, 0, 0); // means that is a item in inventory
+    if (toThing->isCreature())
+        m_protocolGame->sendUseOnCreature(pos, itemId, 0, toThing->getId());
+    else
+        m_protocolGame->sendUseItemWith(pos, itemId, 0, toThing->getPosition(), toThing->getId(), toThing->getStackPos());
+
+    g_lua.callGlobalField("g_game", "onUseWith", pos, itemId, toThing, 0);
+}
+
+void Game::useInventoryRune(const uint16_t itemId, const int32_t runeLevel)
+{
+    if (!canPerformGameAction() || !g_things.isValidDatId(itemId, ThingCategoryItem) || runeLevel < 0 || runeLevel > 444)
+        return;
+
+    const Position pos(0xFFFF, 0x8000 | runeLevel, 0);
+    m_protocolGame->sendUseItem(pos, itemId, 0, 0);
+    g_lua.callGlobalField("g_game", "onUse", pos, itemId, 0, 0);
+}
+
+void Game::useInventoryRuneWith(const uint16_t itemId, const int32_t runeLevel, const ThingPtr& toThing)
+{
+    if (!canPerformGameAction() || !toThing || runeLevel < 0 || runeLevel > 444)
+        return;
+
+    const Position pos(0xFFFF, 0x8000 | runeLevel, 0);
     if (toThing->isCreature())
         m_protocolGame->sendUseOnCreature(pos, itemId, 0, toThing->getId());
     else

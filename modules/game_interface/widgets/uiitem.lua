@@ -223,10 +223,32 @@ function UIItem:onClick(mousePos)
     end
 end
 
+function UIItem:refreshTurretRuneLevel()
+    local item = self:getItem()
+    local overlay = self:getChildById('turretRuneLevel')
+    if not item or not item:isTurretRune() then
+        if overlay then
+            overlay:hide()
+        end
+        return
+    end
+
+    if not overlay then
+        overlay = g_ui.createWidget('TurretRuneLevelOverlay', self)
+        overlay:setId('turretRuneLevel')
+    end
+
+    local level = item:getRuneLevel()
+    overlay:setText(string.format('%d/%d/%d', math.floor(level / 100) % 10,
+        math.floor(level / 10) % 10, level % 10))
+    overlay:show()
+end
+
 function UIItem:onItemChange()
     local tooltip = ""
     if self:getItem() and self:getItem():getTooltip():len() > 0 then
         tooltip = self:getItem():getTooltip()
     end
     self:setTooltip(tooltip)
+    self:refreshTurretRuneLevel()
 end

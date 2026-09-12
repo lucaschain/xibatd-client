@@ -273,6 +273,8 @@ void Item::setId(uint32_t id)
     m_serverId = g_things.findItemTypeByClientId(id)->getServerId();
 #endif
 
+    if (m_clientId != id)
+        m_runeLevel = -1;
     m_clientId = id;
 
     // Shader example on only items that can be marketed.

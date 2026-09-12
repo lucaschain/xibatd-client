@@ -231,6 +231,7 @@ GameTaskboard = 134
 GameProficiency = 135
 GameTacticsWithoutFightMode = 136
 GameDoubleSoul = 137
+GameTurretRuneLevel = 138
 
 TextColors = {
     red = '#f55e5e',    -- '#c83200'

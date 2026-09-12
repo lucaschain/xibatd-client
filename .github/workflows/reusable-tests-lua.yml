@@ -40,6 +40,7 @@ jobs:
           luajit tests/client_assets_legacy_test.lua "$PWD"
           luajit tests/xibat_protocol_lifecycle_test.lua "$PWD"
           luajit tests/xibat_turret_inspector_test.lua "$PWD"
+          luajit tests/xibat_turret_rune_item_test.lua "$PWD"
           luajit tests/xibat_forge_test.lua "$PWD"
           luajit tests/xibat_ascension_test.lua "$PWD"
           luajit tests/xibat_tutorial_test.lua "$PWD"
