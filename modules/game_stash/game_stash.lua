@@ -1,4 +1,7 @@
 stashController = Controller:new()
+local STASH_VERSION = 1
+local STASH_OPCODE = modules.game_xibat_core.XibatOpcode.SupplyStash
+local MENU_CATEGORY = 'xibatSupplyStash'
 -- LuaFormatter off
 
 -- /*=============================================
@@ -38,16 +41,6 @@ local categoryNames = {
     [22] = "Premium Scrolls",  [23] = "Tibia Coins",       [24] = "Creature Products",
     [25] = "Quiver",           [26] = "Soul Cores",        [27] = "Fist Weapons",
 }
-
-local imbuementSet = {}
-for _, id in ipairs({
-    5877, 5920, 9633, 9635, 9636, 9638, 9639, 9640, 9641, 9644, 9647, 9650, 9654,
-    9657, 9660, 9661, 9663, 9665, 9685, 9686, 9691, 9694, 10196, 10281, 10295, 10298,
-    10302, 10304, 10307, 10309, 10311, 10405, 10420, 11444, 11447, 11452, 11464, 11466,
-    11484, 11489, 11492, 11658, 11702, 11703, 14012, 14079, 14081, 16131, 17458, 17823,
-    18993, 18994, 20199, 20200, 20205, 21194, 21200, 21202, 21975, 22007, 22053, 22189,
-    22728, 22730, 23507, 23508, 25694, 25702, 28567, 40529,
-}) do imbuementSet[id] = true end
 
 local function nameAscComparator(a, b)
     local aName, bName = a.meta.nameLower, b.meta.nameLower
@@ -121,12 +114,12 @@ local function resetFilterState()
     filterState.filtered = false
 end
 
-local function matchesCategory(entry, categoryTarget, imbuementOnly)
-    if not categoryTarget and not imbuementOnly then
+local function matchesCategory(entry, categoryTarget, powderOnly)
+    if not categoryTarget and not powderOnly then
         return true
     end
-    if imbuementOnly then
-        return imbuementSet[entry.itemId] == true
+    if powderOnly then
+        return entry.meta.nameLower:find("powder", 1, true) ~= nil
     end
     return entry.meta.categoryName == categoryTarget
 end
@@ -142,20 +135,25 @@ end
 -- =            Data layer                      =
 -- =============================================*/
 
-local function getItemMeta(itemId)
+local function getItemMeta(itemId, serverName)
     local meta = itemMetaCache[itemId]
     if meta then
         return meta
     end
     local thingType = g_things.getThingType(itemId, 0)
-    local name = ""
+    local name = serverName or ""
     local categoryName = ""
     local npcSellSet = {}
     if thingType then
-        name = thingType:getName() or ""
+        if #name == 0 then
+            name = thingType:getName() or ""
+        end
         if thingType:isMarketable() then
             local mData = thingType:getMarketData()
             if mData then
+                if #name == 0 then
+                    name = mData.name or ""
+                end
                 categoryName = categoryNames[mData.category] or ""
             end
             local nData = thingType:getNpcSaleData()
@@ -180,7 +178,7 @@ local function getItemMeta(itemId)
     return meta
 end
 
-local function getStashEntry(itemId)
+local function getStashEntry(itemId, name)
     local entry = stashCache[itemId]
     if entry then
         return entry
@@ -188,7 +186,7 @@ local function getStashEntry(itemId)
     entry = {
         itemId = itemId,
         amount = 0,
-        meta = getItemMeta(itemId)
+        meta = getItemMeta(itemId, name)
     }
     stashCache[itemId] = entry
     return entry
@@ -199,11 +197,11 @@ local function applyFilters(searchText)
     local stashFilter = W.combos.stash.currentIndex ~= 1 and W.combos.stash:getCurrentOption()
     local sellerFilter = W.combos.seller.currentIndex ~= 1 and W.combos.seller:getCurrentOption()
     local categoryTarget = nil
-    local imbuementOnly = false
+    local powderOnly = false
     if stashFilter then
         local opt = stashFilter.text
-        if opt == "Show Imbuement Items" then
-            imbuementOnly = true
+        if opt == "Show Powders" then
+            powderOnly = true
         else
             categoryTarget = opt:sub(6)
         end
@@ -213,7 +211,7 @@ local function applyFilters(searchText)
     for _, entry in pairs(stashCache) do
         local meta = entry.meta
         local passSearch = #searchFilter == 0 or meta.nameLower:find(searchFilter, 1, true)
-        if passSearch and matchesCategory(entry, categoryTarget, imbuementOnly) and matchesSeller(meta, sellerTarget) then
+        if passSearch and matchesCategory(entry, categoryTarget, powderOnly) and matchesSeller(meta, sellerTarget) then
             table.insert(filteredList, entry)
         end
     end
@@ -243,7 +241,7 @@ local function onStashItemBoxMousePress(itemBox, mousePos, mouseButton)
     end
     renderState.selectedBox = itemBox
     itemBox:setChecked(true)
-    prepareWithdraw(itemBox.itemId, itemBox.amount)
+    prepareWithdraw(itemBox.itemId, itemBox.serverId, itemBox.amount)
     return true
 end
 
@@ -256,6 +254,7 @@ local function onStashItemMouseRelease(itemWidget, mousePos, mouseButton)
         return false
     end
     local itemId = itemBox.itemId
+    local serverId = itemBox.serverId
     local amount = itemBox.amount
     local name = itemBox.name
     local thingType = itemBox.thingType
@@ -263,7 +262,7 @@ local function onStashItemMouseRelease(itemWidget, mousePos, mouseButton)
     local menu = g_ui.createWidget('PopupMenu')
     menu:setGameMenu(true)
     menu:addOption(tr('Retrieve'), function()
-        prepareWithdraw(itemId, amount)
+        prepareWithdraw(itemId, serverId, amount)
     end)
     menu:addSeparator()
     menu:addOption(tr('Cyclopedia'), function()
@@ -339,6 +338,7 @@ local function createItemBox(entry)
     local meta = entry.meta
     local itemWidget = itemBox.itemWidget or itemBox:getChildById('item')
     itemBox.itemId = entry.itemId
+    itemBox.serverId = entry.serverId
     itemBox.amount = entry.amount
     itemBox.name = meta.name
     itemBox.thingType = meta.thingType
@@ -438,7 +438,7 @@ local function resetSelectAmount()
     end
 end
 
-function prepareWithdraw(itemId, itemAmount)
+function prepareWithdraw(itemId, serverId, itemAmount)
     resetSelectAmount()
     W.modal.selectAmount = g_ui.createWidget('StashSelectAmount', rootWidget)
     W.modal.selectAmount:lock()
@@ -471,7 +471,11 @@ function prepareWithdraw(itemId, itemAmount)
         scrollbar:setValue(scrollbar:getMinimum())
     end, W.modal.selectAmount)
     local function withdraw()
-        g_game.stashWithdraw(itemId, scrollbar:getValue(), 1)
+        stashController:sendExtendedJSONOpcode(STASH_OPCODE, {
+            version = STASH_VERSION,
+            action = 'withdraw',
+            body = { serverId = serverId, count = scrollbar:getValue() }
+        })
         W.modal.selectAmount:unlock()
         resetSelectAmount()
     end
@@ -582,11 +586,13 @@ local function onSupplyStashEnter(payload)
     table.clear(categorySet)
     table.clear(categoryList)
     for i = 1, #payload do
-        local itemId = payload[i][1]
-        local amount = payload[i][2]
-        local entry = getStashEntry(itemId)
+        local itemId = payload[i].itemId
+        local serverId = payload[i].serverId
+        local amount = payload[i].amount
+        local entry = getStashEntry(itemId, payload[i].name)
         payloadSeen[itemId] = true
         entry.amount = amount
+        entry.serverId = serverId
         if entry.meta.categoryName ~= "" then
             categorySet[entry.meta.categoryName] = true
         end
@@ -604,13 +610,70 @@ local function onSupplyStashEnter(payload)
         table.insert(categoryList, catName)
     end
     table.sort(categoryList)
-    table.insert(categoryList, "Imbuement Items")
+    table.insert(categoryList, "Powders")
     for _, catName in ipairs(categoryList) do
         W.combos.stash:addOption("Show " .. catName)
     end
     W.combos.stash:setCurrentOption("Show All", true)
     suppressRenderEvents = oldSuppress
     renderItems("data")
+end
+
+local function validInteger(value, minimum, maximum)
+    return type(value) == 'number' and value == math.floor(value) and value >= minimum and value <= maximum
+end
+
+local function hasExactFields(value, fields)
+    for key in pairs(value) do if not fields[key] then return false end end
+    for key in pairs(fields) do if value[key] == nil then return false end end
+    return true
+end
+
+local function onSupplyStashOpcode(_, _, payload)
+    if type(payload) ~= 'table' or payload.version ~= STASH_VERSION
+        or (payload.action ~= 'open' and payload.action ~= 'result') or type(payload.body) ~= 'table'
+        or not hasExactFields(payload, { version = true, action = true, body = true })
+        or type(payload.body.code) ~= 'string' or type(payload.body.items) ~= 'table'
+        or not hasExactFields(payload.body, { code = true, items = true }) then
+        return
+    end
+    local items = {}
+    local seen = {}
+    for index, entry in ipairs(payload.body.items) do
+        if type(entry) ~= 'table' or not hasExactFields(entry, { itemId = true, serverId = true, name = true, amount = true })
+            or not validInteger(entry.itemId, 1, 65535)
+            or not validInteger(entry.serverId, 1, 65535) or type(entry.name) ~= 'string' or #entry.name == 0
+            or #entry.name > 128 or not validInteger(entry.amount, 1, 4294967295)
+            or seen[entry.serverId] then
+            return
+        end
+        seen[entry.serverId] = true
+        items[index] = entry
+    end
+    if payload.action == 'result' and payload.body.code ~= 'ok' then
+        modules.game_textmessage.displayFailureMessage(tr('The stash request could not be completed.'))
+    end
+    if payload.action == 'result' and not W.window then
+        return
+    end
+    onSupplyStashEnter(items)
+end
+
+local function canStow(_, lookThing)
+    return W.window and lookThing and lookThing:isItem() and lookThing:isPickupable()
+        and not lookThing:isContainer() and lookThing:getCount() > 0
+end
+
+local function stow(_, lookThing)
+    local position = lookThing:getPosition()
+    stashController:sendExtendedJSONOpcode(STASH_OPCODE, {
+        version = STASH_VERSION,
+        action = 'stow',
+        body = {
+            position = { x = position.x, y = position.y, z = position.z },
+            count = math.min(lookThing:getCount(), 100)
+        }
+    })
 end
 
 -- /*=============================================
@@ -649,18 +712,12 @@ end
 -- =============================================*/
 
 function stashController:onInit()
-
+    g_ui.importStyle('game_stash')
+    stashController:registerExtendedJSONOpcode(STASH_OPCODE, onSupplyStashOpcode)
+    modules.game_interface.addMenuHook(MENU_CATEGORY, tr('Stow in Supply Stash'), stow, canStow)
 end
 
 function stashController:onGameStart()
-    local version = g_game.getClientVersion()
-    if version < 1180 then
-        return
-    end
-    g_ui.importStyle('game_stash')
-    stashController:registerEvents(g_game, {
-        onSupplyStashEnter = onSupplyStashEnter
-    })
 end
 
 function stashController:onGameEnd()
@@ -668,6 +725,7 @@ function stashController:onGameEnd()
 end
 
 function stashController:onTerminate()
+    modules.game_interface.removeMenuHook(MENU_CATEGORY)
     resetSelectAmount()
     itemBoxPool = nil
     stashHandle = nil

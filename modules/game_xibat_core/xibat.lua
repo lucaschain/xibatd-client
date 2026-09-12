@@ -7,4 +7,5 @@ XibatOpcode = {
     RaidSelector = 207,
     Tutorial = 208,
     QuestJournal = 210,
+    SupplyStash = 211,
 }
