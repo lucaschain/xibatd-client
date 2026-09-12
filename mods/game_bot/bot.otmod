@@ -1,7 +1,7 @@
 Module
   name: game_bot
-  description: Advanced OTClientV8 Bot
-  author: otclient@otclient.ovh
+  description: Xibat integrated nExBot
+  author: otclient@otclient.ovh, mCodex
   sandboxed: true
   scripts: [ bot ]
   @onLoad: init()

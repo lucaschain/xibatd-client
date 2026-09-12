@@ -1,0 +1,291 @@
+--[[
+  Unified Tick System - Centralized Macro Management
+  
+  Consolidates 8+ separate macro loops (50-100ms each) into a single
+  master tick that dispatches to handlers based on elapsed time.
+  
+  BEFORE: ~35-50 macro calls/second across multiple macros
+  AFTER: Single 50ms master tick with priority-based dispatch
+  
+  ARCHITECTURE:
+  - Master tick runs at 50ms (highest common frequency)
+  - Handlers register with desired interval and priority
+  - Healing remains on dedicated fast-path for safety
+  - Event-driven updates reduce polling where possible
+  
+  DESIGN PRINCIPLES:
+  - SRP: Each handler has single responsibility
+  - KISS: Simple registration and dispatch
+  - DRY: No duplicate timer logic across modules
+  
+  USAGE:
+    UnifiedTick.register("myHandler", {
+      interval = 200,
+      priority = 5,
+      handler = function(deltaTime) ... end
+    })
+]]
+
+local zChanging = nExBot.zChanging or function() return false end
+local UnifiedTick = {}
+
+-- CONFIGURATION
+
+UnifiedTick.MASTER_INTERVAL = 50  -- Master tick interval (ms)
+UnifiedTick.DEBUG = false         -- Enable debug logging
+UnifiedTick.ENABLED = true        -- Global enable flag
+
+-- PRIORITY LEVELS (Higher = runs first)
+
+UnifiedTick.Priority = {
+  CRITICAL = 100,   -- Safety-critical (healing, emergency)
+  HIGH = 75,        -- Combat-critical (targeting, attacking)
+  NORMAL = 50,      -- Standard features (conditions, buffs)
+  LOW = 25,         -- Background tasks (analytics, UI)
+  IDLE = 10         -- Non-essential (cosmetics, logging)
+}
+
+-- INTERNAL STATE
+
+local handlers = {}           -- Registered tick handlers
+local handlerOrder = {}       -- Sorted handler keys by priority
+local lastTick = 0            -- Last master tick time
+local tickCount = 0           -- Total ticks processed
+local masterMacro = nil       -- Reference to the master macro
+
+-- Performance tracking
+local stats = {
+  totalTicks = 0,
+  totalHandlerCalls = 0,
+  avgTickTime = 0,
+  peakTickTime = 0,
+  handlerStats = {}
+}
+
+-- Time helper
+local nowMs = nExBot.Shared.nowMs
+
+-- HANDLER REGISTRATION
+
+--[[
+  Register a tick handler
+  
+  @param name string Unique handler name
+  @param config table {
+    interval: number (ms between calls),
+    priority: number (higher = runs first),
+    handler: function(deltaTime),
+    enabled: boolean (default true),
+    group: string (optional grouping for batch enable/disable)
+  }
+  @return boolean success
+]]
+function UnifiedTick.register(name, config)
+  if not name or type(name) ~= "string" then
+    warn("[UnifiedTick] Invalid handler name")
+    return false
+  end
+  
+  if not config or type(config.handler) ~= "function" then
+    warn("[UnifiedTick] Invalid handler config for: " .. name)
+    return false
+  end
+  
+  local nowt = nowMs()
+  
+  handlers[name] = {
+    name = name,
+    interval = config.interval or 100,
+    priority = config.priority or UnifiedTick.Priority.NORMAL,
+    handler = config.handler,
+    enabled = config.enabled ~= false,
+    group = config.group or "default",
+    lastRun = nowt,
+    runCount = 0,
+    totalTime = 0,
+    avgTime = 0,
+    errors = 0
+  }
+  
+  -- Track stats
+  stats.handlerStats[name] = {
+    calls = 0,
+    totalTime = 0,
+    avgTime = 0,
+    errors = 0
+  }
+  
+  -- Rebuild sorted order
+  UnifiedTick._rebuildOrder()
+  
+  if UnifiedTick.DEBUG then
+    print(string.format("[UnifiedTick] Registered: %s (interval=%dms, priority=%d)",
+      name, config.interval, config.priority))
+  end
+  
+  return true
+end
+
+--[[
+  return true
+end
+
+--[[
+  Enable/disable a handler
+  @param name string Handler name
+  @param enabled boolean
+]]
+function UnifiedTick.setEnabled(name, enabled)
+  if handlers[name] then
+    handlers[name].enabled = enabled
+  end
+end
+
+function UnifiedTick._rebuildOrder()
+  handlerOrder = {}
+  for name, _ in pairs(handlers) do
+    handlerOrder[#handlerOrder + 1] = name
+  end
+  table.sort(handlerOrder, function(a, b)
+    return (handlers[a].priority or 0) > (handlers[b].priority or 0)
+  end)
+end
+
+-- MASTER TICK EXECUTION
+
+--[[
+  Main tick function - called by master macro
+  Dispatches to handlers based on their intervals
+]]
+function UnifiedTick._tick()
+  if zChanging() then
+    return
+  end
+  if not UnifiedTick.ENABLED then return end
+  
+  local nowt = nowMs()
+  local tickStart = os.clock()
+  local deltaTime = nowt - lastTick
+  lastTick = nowt
+  tickCount = tickCount + 1
+  
+  local handlersRun = 0
+  
+  -- Process handlers in priority order
+  for i = 1, #handlerOrder do
+    local name = handlerOrder[i]
+    local handler = handlers[name]
+    
+    if handler and handler.enabled then
+      local elapsed = nowt - handler.lastRun
+      
+      -- Check if handler should run this tick
+      if elapsed >= handler.interval then
+        local handlerStart = os.clock()
+        
+        -- Run handler with error protection
+        local ok, err = pcall(handler.handler, elapsed)
+        
+        local handlerTime = (os.clock() - handlerStart) * 1000
+        handler.lastRun = nowt
+        handler.runCount = handler.runCount + 1
+        handler.totalTime = handler.totalTime + handlerTime
+        handler.avgTime = handler.totalTime / handler.runCount
+        handlersRun = handlersRun + 1
+        
+        -- Update stats
+        local hs = stats.handlerStats[name]
+        if hs then
+          hs.calls = hs.calls + 1
+          hs.totalTime = hs.totalTime + handlerTime
+          hs.avgTime = hs.totalTime / hs.calls
+        end
+        
+        if not ok then
+          handler.errors = handler.errors + 1
+          if hs then hs.errors = hs.errors + 1 end
+          if UnifiedTick.DEBUG then
+            warn("[UnifiedTick] Error in " .. name .. ": " .. tostring(err))
+          end
+        end
+      end
+    end
+  end
+  
+  -- Update global stats
+  local tickTime = (os.clock() - tickStart) * 1000
+  stats.totalTicks = stats.totalTicks + 1
+  stats.totalHandlerCalls = stats.totalHandlerCalls + handlersRun
+  stats.avgTickTime = (stats.avgTickTime * 0.95) + (tickTime * 0.05)
+  if tickTime > stats.peakTickTime then
+    stats.peakTickTime = tickTime
+  end
+  
+  -- Warn if tick is slow
+  if tickTime > 20 and UnifiedTick.DEBUG then
+    warn(string.format("[UnifiedTick] Slow tick: %.2fms (%d handlers)", tickTime, handlersRun))
+  end
+end
+
+-- LIFECYCLE MANAGEMENT
+
+--[[
+  Start the unified tick system
+  Creates the master macro if not already running
+]]
+function UnifiedTick.start()
+  if masterMacro then
+    return  -- Already running
+  end
+  
+  lastTick = nowMs()
+  
+  -- Create master macro
+  masterMacro = macro(UnifiedTick.MASTER_INTERVAL, function()
+    UnifiedTick._tick()
+  end)
+  
+  print("[UnifiedTick] Started (interval=" .. UnifiedTick.MASTER_INTERVAL .. "ms)")
+end
+
+-- STATISTICS AND DEBUGGING
+
+-- PRE-DEFINED HANDLER TEMPLATES
+-- Common handler patterns for easy migration
+
+--[[
+  Create a condition check handler
+  @param name string Handler name
+  @param checkFn function Condition check function
+  @param interval number Check interval (default 500ms)
+]]
+--[[
+  Create a healing handler (high priority)
+  @param name string Handler name
+  @param healFn function Healing check function
+  @param interval number Check interval (default 100ms)
+]]
+--[[
+  Create a targeting handler (high priority)
+  @param name string Handler name
+  @param targetFn function Targeting logic function
+  @param interval number Check interval (default 200ms)
+]]
+--[[
+  Create a UI update handler (low priority)
+  @param name string Handler name
+  @param updateFn function UI update function
+  @param interval number Update interval (default 300ms)
+]]
+--[[
+  Create an analytics handler (idle priority)
+  @param name string Handler name
+  @param analyticsFn function Analytics function
+  @param interval number Update interval (default 1000ms)
+]]
+-- AUTO-START (Optional)
+-- Uncomment to auto-start when module is loaded
+
+-- UnifiedTick.start()
+
+return UnifiedTick

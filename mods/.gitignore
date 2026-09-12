@@ -1,3 +1,9 @@
 *
 !/README.txt
 !.gitignore
+!/game_bot/
+/game_bot/*
+!/game_bot/default_configs/
+/game_bot/default_configs/*
+!/game_bot/default_configs/nExBot/
+!/game_bot/default_configs/nExBot/**

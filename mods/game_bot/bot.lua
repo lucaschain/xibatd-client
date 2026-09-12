@@ -1,7 +1,6 @@
 botWindow = nil
 botButton = nil
 contentsPanel = nil
-editWindow = nil
 
 local checkEvent = nil
 
@@ -12,12 +11,13 @@ local botMessages = nil
 local botTabs = nil
 local botExecutor = nil
 
-local configList = nil
 local enableButton = nil
 local executeEvent = nil
 local statusLabel = nil
+local copyFilesRecursively
 
-local configManagerUrl = "http://otclient.ovh/configs.php"
+local BOT_CONFIG = "nExBot"
+local BOT_REVISION = "xibat-3"
 
 function init()
   dofile("executor")
@@ -73,17 +73,22 @@ function init()
   end
 
   contentsPanel = botWindow.contentsPanel
-  configList = contentsPanel.config
   enableButton = contentsPanel.enableButton
   statusLabel = contentsPanel.statusLabel
   botMessages = contentsPanel.messages
   botTabs = contentsPanel.botTabs
   botTabs:setContentWidget(contentsPanel.botPanel)
 
-  editWindow = g_ui.displayUI('edit')
-  editWindow:hide()
+  createDefaultConfig()
 
-  loadConfigsList()
+  enableButton.onClick = function()
+    if g_game.isOnline() then
+      refresh()
+    else
+      statusLabel:setOn(true)
+      statusLabel:setText("Status: login to enable bot")
+    end
+  end
 
   if g_game.isOnline() then
     clear()
@@ -101,8 +106,6 @@ function terminate()
   })
 
   terminateCallbacks()
-  editWindow:destroy()
-
   botWindow:destroy()
   botButton:destroy()
 end
@@ -171,37 +174,26 @@ local function updateBotTabsHeight()
   botTabs:setHeight(lines * layout:getCellSize().height)
 end
 
-function loadConfigsList()
+function getConfigName()
+  return BOT_CONFIG
+end
+
+function createDefaultConfig()
   if not g_resources.directoryExists("/bot") then
     g_resources.makeDir("/bot")
     if not g_resources.directoryExists("/bot") then return end
   end
-  createDefaultConfigs()
-  local configs = g_resources.listDirectoryFiles("/bot", false, false)
-  configList.onOptionChange = nil
-  configList:clearOptions()
-  for i=1,#configs do
-    configList:addOption(configs[i])
-  end
-  local settings = g_settings.getNode('bot') or {}
-  if g_game.isOnline() then
-    local index = g_game.getCharacterName() .. "_" .. g_game.getClientVersion()
-    local saved = settings[index]
-    if saved then
-      configList:setCurrentOption(saved.config)
+  local targetDir = "/bot/" .. BOT_CONFIG
+  local revisionFile = targetDir .. "/xibat-revision"
+  if not g_resources.directoryExists(targetDir) then
+    g_resources.makeDir(targetDir)
+    if not g_resources.directoryExists(targetDir) then
+      return onError("Can't create directory: " .. targetDir)
     end
   end
-
-  enableButton.onClick = function(widget)
-    if g_game.isOnline() then
-      refresh()
-    else
-      statusLabel:setOn(true)
-      statusLabel:setText("Status: login to enable bot")
-    end
-  end
-  configList.onOptionChange = function(widget)
-    if g_game.isOnline() then refresh() end
+  local installedRevision = g_resources.fileExists(revisionFile) and g_resources.readFileContents(revisionFile) or ""
+  if installedRevision:gsub("%s+$", "") ~= BOT_REVISION then
+    copyFilesRecursively("default_configs/" .. BOT_CONFIG, targetDir)
   end
 end
 
@@ -210,10 +202,10 @@ function refresh()
   save()
   clear()
 
-  loadConfigsList()
-  if not configList.options or #configList.options == 0 then
+  createDefaultConfig()
+  if not g_resources.directoryExists("/bot/" .. BOT_CONFIG) then
     statusLabel:setOn(true)
-    statusLabel:setText("No configs found in " .. g_resources.getWriteDir() .. "bot/")
+    statusLabel:setText("nExBot is missing from " .. g_resources.getWriteDir() .. "bot/")
     return
   end
 
@@ -223,27 +215,21 @@ function refresh()
   if settings[index] == nil then
     settings[index] = {
       enabled=false,
-      config=""
+      config=BOT_CONFIG,
+      botRevision=BOT_REVISION
     }
-  end
-
-  configList:setCurrentOption(settings[index].config)
-  local currentOpt = configList:getCurrentOption()
-  if currentOpt and currentOpt.text ~= settings[index].config then
-    settings[index].config = currentOpt.text
+  elseif settings[index].config ~= BOT_CONFIG or settings[index].botRevision ~= BOT_REVISION then
     settings[index].enabled = false
-  end
-
-  enableButton:setOn(settings[index].enabled)
-
-  configList.onOptionChange = function(widget)
-    settings[index].config = widget:getCurrentOption().text
+    settings[index].config = BOT_CONFIG
+    settings[index].botRevision = BOT_REVISION
     g_settings.setNode('bot', settings)
     g_settings.save()
-    refresh()
   end
 
-  enableButton.onClick = function(widget)
+  enableButton.onClick = nil
+  enableButton:setOn(settings[index].enabled)
+
+  enableButton.onClick = function()
     settings[index].enabled = not settings[index].enabled
     g_settings.setNode('bot', settings)
     g_settings.save()
@@ -260,7 +246,7 @@ function refresh()
     return
   end
 
-  local configName = settings[index].config
+  local configName = BOT_CONFIG
 
   -- storage
   botStorage = {}
@@ -346,7 +332,6 @@ end
 function offline()
   save()
   clear()
-  editWindow:hide()
 end
 
 function onError(message)
@@ -355,20 +340,7 @@ function onError(message)
   g_logger.error("[BOT] " .. message)
 end
 
-function edit()
-  local configs = g_resources.listDirectoryFiles("/bot", false, false)
-  editWindow.manager.upload.config:clearOptions()
-  for i=1,#configs do
-    editWindow.manager.upload.config:addOption(configs[i])
-  end
-  editWindow.manager.download.config:setText("")
-
-  editWindow:show()
-  editWindow:focus()
-  editWindow:raise()
-end
-
-local function copyFilesRecursively(sourcePath, targetPath)
+copyFilesRecursively = function(sourcePath, targetPath)
     local files = g_resources.listDirectoryFiles(sourcePath, true, false, false)
     for _, file in ipairs(files) do
         local baseName = file:split("/")
@@ -387,116 +359,6 @@ local function copyFilesRecursively(sourcePath, targetPath)
             end
         end
     end
-end
-
-function createDefaultConfigs()
-    local defaultConfigFiles = g_resources.listDirectoryFiles("default_configs", false, false)
-    for _, configName in ipairs(defaultConfigFiles) do
-        local targetDir = "/bot/" .. configName
-        if not g_resources.directoryExists(targetDir) then
-            g_resources.makeDir(targetDir)
-            if not g_resources.directoryExists(targetDir) then
-                return onError("Can't create directory: " .. targetDir)
-            end
-            copyFilesRecursively("default_configs/" .. configName, targetDir)
-        end
-    end
-end
-
-function uploadConfig()
-  local config = editWindow.manager.upload.config:getCurrentOption().text
-  local archive = compressConfig(config)
-  if not archive then
-      return displayErrorBox(tr("Config upload failed"), tr("Config %s is invalid (can't be compressed)", config))
-  end
-  if archive:len() > 1024 * 1024 then
-      return displayErrorBox(tr("Config upload failed"), tr("Config %s is too big, maximum size is 1024KB. Now it has %s KB.", config, math.floor(archive:len() / 1024)))
-  end
-
-  local infoBox = displayInfoBox(tr("Uploading config"), tr("Uploading config %s. Please wait.", config))
-
-  HTTP.postJSON(configManagerUrl .. "?config=" .. config:gsub("%s+", "_"), archive, function(data, err)
-    if infoBox then
-      infoBox:destroy()
-    end
-    if err or data["error"] then
-      return displayErrorBox(tr("Config upload failed"), tr("Error while upload config %s:\n%s", config, err or data["error"]))
-    end
-    displayInfoBox(tr("Succesful config upload"), tr("Config %s has been uploaded.\n%s", config, data["message"]))
-  end)
-end
-
-function downloadConfig()
-  local hash = editWindow.manager.download.config:getText()
-  if hash:len() == 0 then
-      return displayErrorBox(tr("Config download error"), tr("Enter correct config hash"))
-  end
-  local infoBox = displayInfoBox(tr("Downloading config"), tr("Downloading config with hash %s. Please wait.", hash))
-  HTTP.download(configManagerUrl .. "?hash=" .. hash, hash .. ".zip", function(path, checksum, err)
-    if infoBox then
-      infoBox:destroy()
-    end
-    if err then
-      return displayErrorBox(tr("Config download error"), tr("Config with hash %s cannot be downloaded", hash))
-    end
-    modules.client_textedit.show("", {
-      title="Enter name for downloaded config",
-      description="Config with hash " .. hash .. " has been downloaded. Enter name for new config.\nWarning: if config with same name already exist, it will be overwritten!",
-      width=500
-    }, function(configName)
-      decompressConfig(configName, "/downloads/" .. path)
-      refresh()
-      edit()
-    end)
-  end)
-end
-
-function compressConfig(configName)
-  if not g_resources.directoryExists("/bot/" .. configName) then
-    return onError("Config " .. configName .. " doesn't exist")
-  end
-  local forArchive = {}
-  for _, file in ipairs(g_resources.listDirectoryFiles("/bot/" .. configName)) do
-    local fullPath = "/bot/" .. configName .. "/" .. file
-    if g_resources.fileExists(fullPath) then -- regular file
-        forArchive[file] = g_resources.readFileContents(fullPath)
-    else -- dir
-      for __, file2 in ipairs(g_resources.listDirectoryFiles(fullPath)) do
-        local fullPath2 = fullPath .. "/" .. file2
-        if g_resources.fileExists(fullPath2) then -- regular file
-            forArchive[file .. "/" .. file2] = g_resources.readFileContents(fullPath2)
-        end
-      end
-    end
-  end
-  return g_resources.createArchive(forArchive)
-end
-
-function decompressConfig(configName, archive)
-  if g_resources.directoryExists("/bot/" .. configName) then
-    g_resources.deleteFile("/bot/" .. configName) -- also delete dirs
-  end
-  local files = g_resources.decompressArchive(archive)
-  g_resources.makeDir("/bot/" .. configName)
-  if not g_resources.directoryExists("/bot/" .. configName) then
-    return onError("Can't create /bot/" .. configName .. " directory in " .. g_resources.getWriteDir())
-  end
-
-  for file, contents in pairs(files) do
-    local split = file:split("/")
-    split[#split] = nil -- remove file name
-    local dirPath = "/bot/" .. configName
-    for _, s in ipairs(split) do
-      dirPath = dirPath .. "/" .. s
-      if not g_resources.directoryExists(dirPath) then
-        g_resources.makeDir(dirPath)
-        if not g_resources.directoryExists(dirPath) then
-          return onError("Can't create " .. dirPath .. " directory in " .. g_resources.getWriteDir())
-        end
-      end
-    end
-    g_resources.writeFileContents("/bot/" .. configName .. file, contents)
-  end
 end
 
 -- Executor

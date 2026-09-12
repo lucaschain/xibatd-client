@@ -1,20 +1,7 @@
 function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, reloadCallback, websockets)
-  -- load lua and otui files
-  local configFiles = g_resources.listDirectoryFiles("/bot/" .. config, true, false)
-  local luaFiles = {}
-  local uiFiles = {}
-  for i, file in ipairs(configFiles) do
-    local ext = file:split(".")
-    if ext[#ext]:lower() == "lua" then
-      table.insert(luaFiles, file)
-    end
-    if ext[#ext]:lower() == "ui" or ext[#ext]:lower() == "otui" then
-      table.insert(uiFiles, file)
-    end
-  end
-
-  if #luaFiles == 0 then
-    return error("Config (/bot/" .. config .. ") doesn't have lua files")
+  local entryPoint = "/bot/" .. config .. "/_Loader.lua"
+  if not g_resources.fileExists(entryPoint) then
+    return error("Bot entry point not found: " .. entryPoint)
   end
 
   -- init bot variables
@@ -90,6 +77,16 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
   context.tonumber = tonumber
   context.type = type
   context.pcall = pcall
+  context.xpcall = xpcall
+  context.select = select
+  context.next = next
+  context.rawget = rawget
+  context.rawset = rawset
+  context.rawequal = rawequal
+  context.unpack = unpack or table.unpack
+  local function resolveBotPath(file)
+    return "/bot/" .. config .. "/" .. file:gsub("^/+", "")
+  end
   context.os = {
     time = os.time,
     difftime = os.difftime,
@@ -103,13 +100,15 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
       return func
     end
     context.dofile = function(file) 
-      local func = assert(loadstring(g_resources.readFileContents("/bot/" .. config .. "/" .. file)))
+      local func = assert(loadstring(g_resources.readFileContents(resolveBotPath(file))))
       setfenv(func, context)
-      func()
+      return func()
     end
   else
     context.load = function(str) return assert(load(str, nil, nil, context)) end
-    context.dofile = function(file) assert(load(g_resources.readFileContents("/bot/" .. config .. "/" .. file), file, nil, context))() end
+    context.dofile = function(file)
+      return assert(load(g_resources.readFileContents(resolveBotPath(file)), file, nil, context))()
+    end
   end
   context.loadstring = context.load
   context.assert = assert
@@ -152,6 +151,7 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
   context.OutputMessage = OutputMessage
   context.modules = modules
   context.Directions = Directions
+  context._G = context
 
   -- log functions
   context.info = function(text) return msgCallback("info", tostring(text)) end
@@ -171,22 +171,14 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
   dofiles("panels")
   G.botContext = nil
 
-  -- run ui scripts
-  for i, file in ipairs(uiFiles) do
-    g_ui.importStyle(file)
+  if _VERSION == "Lua 5.1" and type(jit) ~= "table" then
+    local func = assert(loadstring(g_resources.readFileContents(entryPoint)))
+    setfenv(func, context)
+    func()
+  else
+    assert(load(g_resources.readFileContents(entryPoint), entryPoint, nil, context))()
   end
-
-  -- run lua script
-  for i, file in ipairs(luaFiles) do
-      if _VERSION == "Lua 5.1" and type(jit) ~= "table" then
-        local func = assert(loadstring(g_resources.readFileContents(file)))
-        setfenv(func, context)
-        func()
-      else
-        assert(load(g_resources.readFileContents(file), file, nil, context))()
-      end
-    context.panel = context.mainTab -- reset default tab
-  end
+  context.panel = context.mainTab
 
   return {
     script = function()

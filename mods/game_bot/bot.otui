@@ -74,36 +74,13 @@ MiniWindow
     !text: tr('Bot')
 
   MiniWindowContents
-    ComboBox
-      id: config
-      &menuScroll: true
-      &menuHeight: 450
-      &menuScrollStep: 100
-      &parentWidth: true
+    Button
+      id: enableButton
       anchors.top: parent.top
       anchors.left: parent.left
       anchors.right: parent.right
       margin-top: 2
       margin-left: 2
-      margin-right: 75
-      text-offset: 3 0
-
-    Button
-      id: editConfig
-      anchors.top: prev.top
-      anchors.left: prev.right
-      anchors.right: parent.right
-      !text: tr('Edit')
-      @onClick: modules.game_bot.edit()
-      margin-left: 3
-      margin-right: 37
-
-    Button
-      id: enableButton
-      anchors.top: prev.top
-      anchors.left: prev.right
-      anchors.right: parent.right
-      margin-left: 3
       margin-right: 2
 
       $on:

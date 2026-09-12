@@ -1,0 +1,385 @@
+setDefaultTab("Main")
+local zChanging = nExBot.zChanging or function() return false end
+local SafeCall = SafeCall or require("core.safe_call")
+local panelName = "combobot"
+
+local ui = setupUI([[
+Panel
+  height: 19
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    text-align: center
+    width: 130
+    !text: tr('ComboBot')
+
+  Button
+    id: combos
+    anchors.top: prev.top
+    anchors.left: prev.right
+    anchors.right: parent.right
+    margin-left: 3
+    height: 17
+    text: Setup
+
+]])
+ui:setId(panelName)
+
+if not storage[panelName] then
+  storage[panelName] = {
+    enabled = false,
+    onSayEnabled = false,
+    onShootEnabled = false,
+    onCastEnabled = false,
+    followLeaderEnabled = false,
+    attackLeaderTargetEnabled = false,
+    attackSpellEnabled = false,
+    attackItemEnabled = false,
+    sayLeader = "",
+    shootLeader = "",
+    castLeader = "",
+    sayPhrase = "",
+    spell = "",
+    item = 3155,
+    attack = "",
+    follow = "",
+    commandsEnabled = true,
+  }
+end
+
+local config = storage[panelName]
+
+local function canUseAttackItem()
+  return config.attackItemEnabled and config.item and config.item > 100 and findItem and findItem(config.item)
+end
+
+local leaderTarget = nil
+local startCombo = false
+
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+  config.enabled = not config.enabled
+  widget:setOn(config.enabled)
+end
+
+ui.combos.onClick = function(widget)
+  comboWindow:show()
+  comboWindow:raise()
+  comboWindow:focus()
+end
+
+rootWidget = g_ui.getRootWidget()
+if rootWidget then
+  comboWindow = UI.createWindow('ComboWindow', rootWidget)
+  comboWindow:hide()
+
+  comboWindow.actions.attackItem:setItemId(config.item)
+  comboWindow.actions.attackItem.onItemChange = function(widget)
+    config.item = widget:getItemId()
+  end
+
+  comboWindow.actions.commandsToggle:setOn(config.commandsEnabled)
+  comboWindow.actions.commandsToggle.onClick = function(widget)
+    config.commandsEnabled = not config.commandsEnabled
+    widget:setOn(config.commandsEnabled)
+  end
+
+  comboWindow.closeButton.onClick = function(widget)
+    comboWindow:hide()
+  end
+
+  comboWindow.actions.followLeader:setOption(config.follow)
+  comboWindow.actions.followLeader.onOptionChange = function(widget)
+    config.follow = widget:getCurrentOption().text
+  end
+
+  comboWindow.actions.attackLeaderTarget:setOption(config.attack)
+  comboWindow.actions.attackLeaderTarget.onOptionChange = function(widget)
+    config.attack = widget:getCurrentOption().text
+    -- Auto-enable attack when LEADER TARGET is selected
+    if config.attack == "LEADER TARGET" then
+      config.attackLeaderTargetEnabled = true
+      comboWindow.actions.attackLeaderTargetToggle:setChecked(true)
+    end
+  end
+
+  comboWindow.trigger.onSayToggle:setChecked(config.onSayEnabled)
+  comboWindow.trigger.onSayToggle.onClick = function(widget)
+    config.onSayEnabled = not config.onSayEnabled
+    widget:setChecked(config.onSayEnabled)
+  end
+
+  comboWindow.trigger.onShootToggle:setChecked(config.onShootEnabled)
+  comboWindow.trigger.onShootToggle.onClick = function(widget)
+    config.onShootEnabled = not config.onShootEnabled
+    widget:setChecked(config.onShootEnabled)
+  end
+
+  comboWindow.trigger.onCastToggle:setChecked(config.onCastEnabled)
+  comboWindow.trigger.onCastToggle.onClick = function(widget)
+    config.onCastEnabled = not config.onCastEnabled
+    widget:setChecked(config.onCastEnabled)
+  end
+
+  comboWindow.actions.followLeaderToggle:setChecked(config.followLeaderEnabled)
+  comboWindow.actions.followLeaderToggle.onClick = function(widget)
+    config.followLeaderEnabled = not config.followLeaderEnabled
+    widget:setChecked(config.followLeaderEnabled)
+  end
+
+  comboWindow.actions.attackLeaderTargetToggle:setChecked(config.attackLeaderTargetEnabled)
+  comboWindow.actions.attackLeaderTargetToggle.onClick = function(widget)
+    config.attackLeaderTargetEnabled = not config.attackLeaderTargetEnabled
+    widget:setChecked(config.attackLeaderTargetEnabled)
+  end
+
+  comboWindow.actions.attackSpellToggle:setChecked(config.attackSpellEnabled)
+  comboWindow.actions.attackSpellToggle.onClick = function(widget)
+    config.attackSpellEnabled = not config.attackSpellEnabled
+    widget:setChecked(config.attackSpellEnabled)
+  end
+
+  comboWindow.actions.attackItemToggle:setChecked(config.attackItemEnabled)
+  comboWindow.actions.attackItemToggle.onClick = function(widget)
+    config.attackItemEnabled = not config.attackItemEnabled
+    widget:setChecked(config.attackItemEnabled)
+  end
+
+  comboWindow.trigger.onSayLeader:setText(config.sayLeader)
+  comboWindow.trigger.onSayLeader.onTextChange = function(widget, text)
+    config.sayLeader = text
+  end
+
+  comboWindow.trigger.onShootLeader:setText(config.shootLeader)
+  comboWindow.trigger.onShootLeader.onTextChange = function(widget, text)
+    config.shootLeader = text
+  end
+
+  comboWindow.trigger.onCastLeader:setText(config.castLeader)
+  comboWindow.trigger.onCastLeader.onTextChange = function(widget, text)
+    config.castLeader = text
+  end
+
+  comboWindow.trigger.onSayPhrase:setText(config.sayPhrase)
+  comboWindow.trigger.onSayPhrase.onTextChange = function(widget, text)
+    config.sayPhrase = text
+  end
+
+  comboWindow.actions.attackSpell:setText(config.spell)
+  comboWindow.actions.attackSpell.onTextChange = function(widget, text)
+    config.spell = text
+  end
+end
+
+onTalk(function(name, level, mode, text, channelId, pos)
+  if not config.enabled then return end
+
+  if name:lower() == config.sayLeader:lower() and config.sayPhrase and string.find(text, config.sayPhrase) and config.onSayEnabled then
+    startCombo = true
+  end
+  if config.castLeader and name:lower() == config.castLeader:lower() and isAttSpell and isAttSpell(text) and config.onCastEnabled then
+    startCombo = true
+  end
+
+  if config.commandsEnabled then
+    local isLeader = (config.shootLeader and name:lower() == config.shootLeader:lower())
+        or (config.sayLeader and name:lower() == config.sayLeader:lower())
+        or (config.castLeader and name:lower() == config.castLeader:lower())
+    if isLeader then
+      local textLower = text:lower()
+      if textLower == "ue" then
+        say(config.spell)
+      elseif textLower == "sd" then
+        local params = string.split(text, ",")
+        if #params == 2 then
+          local target = params[2]:trim()
+          local creature = SafeCall.getCreatureByName(target)
+          if creature and useWith then
+            useWith(config.item, creature)
+          end
+        end
+      elseif textLower == "att" then
+        local attParams = string.split(text, ",")
+        if #attParams == 2 then
+          local atTarget = attParams[2]:trim()
+          local creature = SafeCall.getCreatureByName(atTarget)
+          if creature and config.attack == "COMMAND TARGET" and AttackStateMachine and AttackStateMachine.requestAttack then
+            AttackStateMachine.requestAttack(creature, 1000)
+          end
+        end
+      end
+    end
+  end
+
+  if isAttSpell and isAttSpell(text) and config.enabled and isLeader and config.onCastEnabled then
+    EventBus.emit("combo:trigger")
+  end
+end)
+
+onMissle(function(missle)
+  if zChanging() then return end
+  if not config.enabled or not config.onShootEnabled then return end
+  if not config.shootLeader or config.shootLeader:len() == 0 then return end
+
+  local src = missle:getSource()
+  if src.z ~= posz() then return end
+
+  local from = g_map.getTile(src)
+  local to = g_map.getTile(missle:getDestination())
+  if not from or not to then return end
+
+  local fromCreatures = from:getCreatures()
+  local toCreatures = to:getCreatures()
+  if #fromCreatures == 0 or #toCreatures == 0 then return end
+
+  -- Find the leader among creatures on the source tile
+  local leader = nil
+  for _, c in ipairs(fromCreatures) do
+    if c:getName():lower() == config.shootLeader:lower() then
+      leader = c
+      break
+    end
+  end
+  if not leader then return end
+
+  -- Pick the target: prefer the first non-leader, non-local creature on destination tile
+  local player = g_game.getLocalPlayer()
+  local t1 = nil
+  for _, c in ipairs(toCreatures) do
+    if c ~= leader and (not player or c ~= player) then
+      t1 = c
+      break
+    end
+  end
+  if not t1 then return end
+
+  leaderTarget = t1
+  if canUseAttackItem() and useWith then
+    useWith(config.item, t1)
+  end
+  if config.attackSpellEnabled and config.spell and config.spell:len() > 1 then
+    say(config.spell)
+  end
+  if config.attack == "LEADER TARGET" and AttackStateMachine and AttackStateMachine.requestAttack then
+    AttackStateMachine.requestAttack(leaderTarget, 1000)
+  end
+end)
+
+local function leaderTargetHandler()
+  if not config.enabled then return end
+  if not leaderTarget or config.attack ~= "LEADER TARGET" then return end
+
+  -- Clear stale target (creature left screen or died)
+  if not leaderTarget then return end
+  if not leaderTarget.getPosition then leaderTarget = nil; return end
+  local ltPos = leaderTarget:getPosition()
+  if not ltPos then leaderTarget = nil; return end
+
+  local target = SafeCall.getTarget()
+  if not target or target:getName() ~= leaderTarget:getName() then
+    if AttackStateMachine and AttackStateMachine.requestAttack then
+      AttackStateMachine.requestAttack(leaderTarget, 1000)
+    end
+  end
+end
+
+local toFollow = nil
+local toFollowPos = {}
+local lastFollowPos = nil
+local lastFollowWalk = 0
+local FOLLOW_WALK_COOLDOWN = 100
+
+local function followLeaderHandler()
+  if not config.enabled or not config.followLeaderEnabled then
+    toFollow = nil
+    return
+  end
+  toFollow = nil  -- Clear before evaluating rules
+
+  if config.follow == "LEADER TARGET" and leaderTarget and leaderTarget:isPlayer() then
+    toFollow = leaderTarget:getName()
+  elseif config.follow == "LEADER" then
+    if config.onSayEnabled and config.sayLeader and config.sayLeader:len() ~= 0 then
+      toFollow = config.sayLeader
+    elseif config.onCastEnabled and config.castLeader and config.castLeader:len() ~= 0 then
+      toFollow = config.castLeader
+    elseif config.onShootEnabled and config.shootLeader and config.shootLeader:len() ~= 0 then
+      toFollow = config.shootLeader
+    end
+  end
+
+  if not toFollow then return end
+
+  local target = SafeCall.getCreatureByName(toFollow)
+  if target then
+    local tpos = target:getPosition()
+    toFollowPos[tpos.z] = tpos
+  end
+
+  if player:isWalking() then return end
+  local p = toFollowPos[posz()]
+  if not p then return end
+
+  local posKey = p.x .. "," .. p.y .. "," .. p.z
+  if posKey == lastFollowPos then return end
+  if (now - lastFollowWalk) < FOLLOW_WALK_COOLDOWN then return end
+
+  if CaveBot.walkTo(p, 20, {ignoreNonPathable=true, precision=1, ignoreStairs=false}) then
+    lastFollowWalk = now
+    lastFollowPos = posKey
+  end
+end
+
+onCreaturePositionChange(function(creature, oldPos, newPos)
+  if zChanging() then return end
+  if toFollow and creature:getName() == toFollow and newPos then
+    toFollowPos[newPos.z] = newPos
+    lastFollowPos = nil
+  end
+end)
+
+local function comboTriggerHandler()
+  if config.enabled and startCombo then
+    if canUseAttackItem() and useWith then
+      local target = SafeCall.getTarget()
+      if target then useWith(config.item, target) end
+    end
+    if config.attackSpellEnabled and config.spell and config.spell:len() > 1 then
+      say(config.spell)
+    end
+    startCombo = false
+  end
+end
+
+EventBus.on("combo:trigger", function()
+  startCombo = true
+end)
+
+if UnifiedTick and UnifiedTick.register then
+  UnifiedTick.register("combo_leader_target", {
+    interval = 100,
+    priority = UnifiedTick.Priority and UnifiedTick.Priority.NORMAL or 50,
+    handler = leaderTargetHandler,
+    group = "combo"
+  })
+
+  UnifiedTick.register("combo_follow_leader", {
+    interval = 100,
+    priority = UnifiedTick.Priority and UnifiedTick.Priority.NORMAL or 50,
+    handler = followLeaderHandler,
+    group = "combo"
+  })
+
+  UnifiedTick.register("combo_trigger", {
+    interval = 100,
+    priority = UnifiedTick.Priority and UnifiedTick.Priority.HIGH or 75,
+    handler = comboTriggerHandler,
+    group = "combo"
+  })
+else
+  macro(100, leaderTargetHandler)
+  macro(100, followLeaderHandler)
+  macro(100, comboTriggerHandler)
+end
