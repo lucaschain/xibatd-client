@@ -227,6 +227,7 @@ tags
 *.dat
 *.pic
 config.otml
+local-config.lua
 *.patch
 
 ## Cmake cache

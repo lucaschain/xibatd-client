@@ -77,6 +77,14 @@ if ENABLE_SERVERS then
     }
 end
 
+-- Developer-specific endpoints stay outside version control and survive full deployments.
+if g_resources.fileExists('/local-config.lua') then
+    local loaded, loadError = pcall(dofile, '/local-config.lua')
+    if not loaded then
+        g_logger.fatal('Unable to load local-config.lua: ' .. tostring(loadError))
+    end
+end
+
 g_app.setName("Xiba Tower Defense");
 g_app.setCompactName("otclient");
 g_app.setOrganizationName("otcr");

@@ -10,6 +10,9 @@
 
 - `build-windows.ps1` from a native Windows checkout is the only supported Xibat client build entry point.
 - Do not substitute direct CMake, Visual Studio, WSL/Linux, or Docker builds when asked to build the client.
+- When operating from WSL, first check for `powershell.exe` and translate the script path with `wslpath -w`.
+  If it resolves to a drive path such as `C:\...` rather than a WSL UNC path, invoke the documented
+  script through Windows PowerShell; this is a supported native Windows build, not a Linux build.
 - See `docs/building/xibat-windows.md` for prerequisites, outputs, and options.
 - For Lua/OTUI/UI-image-only deployments, use `build-windows.ps1 -UIOnly` with the client closed; this skips compilation and preserves installed game assets.
 

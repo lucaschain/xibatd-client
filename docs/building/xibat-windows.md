@@ -12,6 +12,19 @@ WSL/Linux builds, or Docker builds for a supported Xibat client artifact. Those 
 are retained as upstream or development references and do not perform the complete
 Xibat build and deployment contract.
 
+Automation running from a WSL shell may invoke the same supported Windows build when
+Windows PowerShell is available and the checkout has a native drive-path mapping. Verify
+that `wslpath -w "$PWD"` returns a path such as `C:\Users\name\dev\xibatd-client`, not
+`\\wsl.localhost\...`, then run:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$PWD/build-windows.ps1")"
+```
+
+This launches the Windows script, MSVC, Windows CMake preset, and Windows vcpkg from
+the native checkout. It is not a WSL/Linux CMake build. Agents should try this route
+before reporting that the supported client build is unavailable.
+
 The script:
 
 - Initializes the Visual Studio x64 compiler environment.
@@ -32,6 +45,18 @@ filesystem, such as `C:\src\xibatd-client`; the script rejects WSL UNC paths.
 
 The default asset directory is `data\things\1098` under the checkout and must contain
 `Tibia.dat` and `Tibia.spr`. Stop any running `otclient.exe` before building.
+
+Full deployment replaces tracked root configuration, including `init.lua`. Local server
+selection must therefore live in the ignored `local-config.lua`, not in a manually edited
+installed `init.lua`. When present in the checkout or existing installation, the build script
+copies this override into the new installation. For example:
+
+```lua
+Services.updater = nil
+Servers_init = {
+    ['127.0.0.1'] = { port = 7171, protocol = 1098, httpLogin = false, useAuthenticator = false },
+}
+```
 
 ## Options
 

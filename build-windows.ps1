@@ -219,6 +219,14 @@ Copy-Item -LiteralPath $builtExecutable -Destination (Join-Path $stagePath 'otcl
 foreach ($file in 'init.lua', 'otclientrc.lua', 'config.ini', 'cacert.pem', 'LICENSE') {
     Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $stagePath $file) -Force
 }
+$sourceLocalConfig = Join-Path $sourceRoot 'local-config.lua'
+$installedLocalConfig = Join-Path $OutputPath 'local-config.lua'
+if (Test-Path -LiteralPath $sourceLocalConfig -PathType Leaf) {
+    Copy-Item -LiteralPath $sourceLocalConfig -Destination (Join-Path $stagePath 'local-config.lua') -Force
+}
+elseif (Test-Path -LiteralPath $installedLocalConfig -PathType Leaf) {
+    Copy-Item -LiteralPath $installedLocalConfig -Destination (Join-Path $stagePath 'local-config.lua') -Force
+}
 
 $requiredRuntimeFiles = @(
     'otclient.exe',
