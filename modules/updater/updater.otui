@@ -44,12 +44,12 @@ StaticMainWindow
     visible: false
 
   Button
-    id: laterButton
+    id: exitButton
     margin-left: 50
     margin-right: 50
     margin-top: 5
-    !text: tr('Later')
-    @onClick: Updater.abort()
+    !text: tr('Exit')
+    @onClick: Updater.exit()
     visible: false
 
   Button

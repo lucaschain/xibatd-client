@@ -8,6 +8,7 @@ on:
       - "Dockerfile.browser"
       - "Dockerfile.browser.sh"
       - "browser/**"
+      - "tools/package_browser_release.py"
       - "data/**"
       - "mods/**"
       - "modules/**"
@@ -52,6 +53,9 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
       - name: Download browser bundle
         uses: actions/download-artifact@v8
         with:
@@ -66,6 +70,8 @@ jobs:
           for file in otclient.html otclient.js otclient.wasm otclient.data; do
             test -s "$bundle/$file"
           done
+          python3 tools/package_browser_release.py "$bundle" "$GITHUB_SHA"
+          test -s "$bundle/revision.json"
           archive="xibatd-browser-$GITHUB_SHA.tar.gz"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
             -C "$bundle" -czf "$RUNNER_TEMP/$archive" .

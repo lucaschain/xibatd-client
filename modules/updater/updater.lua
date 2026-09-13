@@ -1,18 +1,27 @@
 Updater = {}
 
-Updater.maxRetries = 3
 Updater.maxArchiveSize = 256 * 1024 * 1024
 
 local updaterWindow
 local loadModulesFunction
 local httpOperationId = 0
-local retries = 0
 local pendingPayload
+local errorWindow
+local checkForUpdate
+local checkGeneration = 0
+local downloadGeneration = 0
 
 local function closeWindow()
   if updaterWindow then
     updaterWindow:destroy()
     updaterWindow = nil
+  end
+end
+
+local function closeErrorWindow()
+  if errorWindow then
+    errorWindow:destroy()
+    errorWindow = nil
   end
 end
 
@@ -31,24 +40,63 @@ local function finishWithoutUpdate()
   signalcall(g_app.onUpdateFinished, g_app)
 end
 
-local function fail(message)
-  g_logger.error('Desktop update failed: ' .. tostring(message))
+local function exitClient()
+  checkGeneration = checkGeneration + 1
+  downloadGeneration = downloadGeneration + 1
+  HTTP.cancel(httpOperationId)
+  closeErrorWindow()
   closeWindow()
-  displayErrorBox(tr('Updater Error'), tr('The update could not be installed. The current client will continue.\n\n%s', tostring(message))).onOk = function()
-    loadModules()
-    signalcall(g_app.onUpdateFinished, g_app)
+  g_app.exit()
+end
+
+local function fail(message, retryCallback)
+  g_logger.error('Desktop update failed: ' .. tostring(message))
+  HTTP.cancel(httpOperationId)
+  closeErrorWindow()
+
+  local function retry()
+    closeErrorWindow()
+    retryCallback()
   end
+  errorWindow = displayGeneralBox(tr('Updater Error'),
+    tr('The client cannot continue until the update succeeds.\n\n%s', tostring(message)), {
+      { text = tr('Retry'), callback = retry },
+      { text = tr('Exit'), callback = exitClient }
+    }, retry, exitClient)
 end
 
 local function readLocalRelease()
-  if not g_resources.fileExistsInWorkDir('update-release.json') then
-    return { sequence = 0, revision = g_app.getBuildRevision() }
-  end
-  local ok, release = pcall(json.decode, g_resources.readFileContentsFromWorkDir('update-release.json'))
-  if not ok or type(release) ~= 'table' then
+  local ok, release = pcall(function()
+    if not g_resources.fileExistsInWorkDir('update-release.json') then
+      return { sequence = 0, revision = g_app.getBuildRevision() }
+    end
+    return json.decode(g_resources.readFileContentsFromWorkDir('update-release.json'))
+  end)
+  if not ok then return nil, 'Unable to read the installed release metadata: ' .. tostring(release) end
+  if type(release) ~= 'table' then
     return { sequence = 0, revision = g_app.getBuildRevision() }
   end
   return release
+end
+
+local function readInstallerFailure()
+  local ok, contents = pcall(function()
+    if not g_resources.fileExistsInWorkDir('.update/status.json') then return nil end
+    return g_resources.readFileContentsFromWorkDir('.update/status.json')
+  end)
+  if not ok then return nil, 'Unable to read the previous update status: ' .. tostring(contents) end
+  if not contents then return nil end
+
+  contents = contents:gsub('^\239\187\191', '')
+  local decoded, status = pcall(json.decode, contents)
+  if not decoded or type(status) ~= 'table' or type(status.status) ~= 'string' then
+    return nil, 'The previous update status is invalid.'
+  end
+  if status.status == 'rolled_back' then
+    return tostring(status.error or 'The previous update was rolled back.')
+  end
+  if status.status == 'installed' or status.status == 'acknowledged' then return nil end
+  return nil, 'The previous update status is invalid.'
 end
 
 function Updater.validateEnvelope(envelope)
@@ -60,8 +108,9 @@ function Updater.validateEnvelope(envelope)
     return nil, 'The update signature is invalid.'
   end
 
-  local payloadBytes = g_crypt.base64Decode(envelope.payload)
-  local ok, payload = pcall(json.decode, payloadBytes)
+  local ok, payload = pcall(function()
+    return json.decode(g_crypt.base64Decode(envelope.payload))
+  end)
   if not ok or type(payload) ~= 'table' then
     return nil, 'The signed update payload is invalid.'
   end
@@ -92,18 +141,18 @@ end
 local function launchInstaller(payload, downloadName)
   updaterWindow.status:setText(tr('Preparing update'))
   if not g_resources.writeDownloadedFileToWorkDir(downloadName, '.update/package.zip', false) then
-    return fail('Unable to stage the downloaded package.')
+    return fail('Unable to stage the downloaded package.', Updater.install)
   end
   if g_resources.fileSha256InWorkDir('.update/package.zip') ~= payload.archive_sha256 then
-    return fail('The downloaded package checksum is invalid.')
+    return fail('The downloaded package checksum is invalid.', Updater.install)
   end
   if g_resources.fileSizeInWorkDir('.update/package.zip') ~= payload.archive_size then
-    return fail('The downloaded package size is invalid.')
+    return fail('The downloaded package size is invalid.', Updater.install)
   end
 
   local stageRelative = '.update/stage-' .. tostring(payload.sequence)
   if not g_resources.extractDownloadedArchiveToWorkDir(downloadName, stageRelative, 'xibatd-client', true) then
-    return fail('Unable to extract the downloaded package.')
+    return fail('Unable to extract the downloaded package.', Updater.install)
   end
 
   local workDir = g_resources.getWorkDir()
@@ -119,32 +168,29 @@ local function launchInstaller(payload, downloadName)
     '-StageDir', stage
   })
   if not started then
-    return fail('Unable to start the Windows update installer.')
+    return fail('Unable to start the Windows update installer.', Updater.install)
   end
 
   updaterWindow.status:setText(tr('Restarting into version %s', payload.version))
   g_app.exit()
 end
 
-local function downloadUpdate()
+local function downloadUpdate(generation)
   local payload = pendingPayload
-  if not payload or not updaterWindow then return end
+  if generation ~= downloadGeneration or not payload or not updaterWindow then return end
 
-  retries = retries + 1
   updaterWindow.updateNowButton:hide()
-  updaterWindow.laterButton:hide()
+  updaterWindow.exitButton:hide()
   updaterWindow.cancelButton:show()
   updaterWindow.downloadProgress:show()
   updaterWindow.downloadStatus:show()
   updaterWindow.status:setText(tr('Downloading version %s', payload.version))
 
   local downloadName = 'client-update-' .. tostring(payload.sequence) .. '.zip'
-  httpOperationId = HTTP.download(payload.archive_url, downloadName, function(_, _, err)
+  local started, operationId = pcall(HTTP.download, payload.archive_url, downloadName, function(_, _, err)
+    if generation ~= downloadGeneration then return end
     if err then
-      if retries < Updater.maxRetries then
-        return scheduleEvent(downloadUpdate, 500)
-      end
-      return fail(err)
+      return fail(err, Updater.install)
     end
     launchInstaller(payload, downloadName)
   end, function(progress, speed)
@@ -152,6 +198,8 @@ local function downloadUpdate()
     updaterWindow.downloadProgress:setPercent(progress)
     updaterWindow.downloadProgress:setText(speed .. ' kbps')
   end)
+  if not started then return fail(operationId, Updater.install) end
+  httpOperationId = operationId
 end
 
 local function offerUpdate(payload)
@@ -159,8 +207,60 @@ local function offerUpdate(payload)
   updaterWindow.status:setText(tr('Version %s is ready to install.', payload.version))
   updaterWindow.mainProgress:setPercent(100)
   updaterWindow.updateNowButton:show()
-  updaterWindow.laterButton:show()
+  updaterWindow.exitButton:show()
   updaterWindow.cancelButton:hide()
+end
+
+checkForUpdate = function()
+  checkGeneration = checkGeneration + 1
+  local generation = checkGeneration
+  closeErrorWindow()
+  pendingPayload = nil
+  updaterWindow.updateNowButton:hide()
+  updaterWindow.exitButton:hide()
+  updaterWindow.cancelButton:hide()
+  updaterWindow.downloadProgress:hide()
+  updaterWindow.downloadStatus:hide()
+  updaterWindow.mainProgress:setPercent(0)
+  updaterWindow.status:setText(tr('Checking for updates'))
+
+  local started, operationId = pcall(HTTP.getJSON, Services.updater, function(envelope, err)
+    if generation ~= checkGeneration then return end
+    if err then
+      g_logger.warning('Desktop update check unavailable: ' .. tostring(err))
+      return fail(err, checkForUpdate)
+    end
+    local payload, validationError = Updater.validateEnvelope(envelope)
+    if not payload then
+      return fail(validationError, checkForUpdate)
+    end
+    local localRelease, localReleaseError = readLocalRelease()
+    if not localRelease then return fail(localReleaseError, checkForUpdate) end
+    if not Updater.isUpdateAvailable(payload, localRelease) then
+      return finishWithoutUpdate()
+    end
+    offerUpdate(payload)
+  end)
+  if not started then return fail(operationId, checkForUpdate) end
+  httpOperationId = operationId
+end
+
+local function checkInstallerStatus()
+  local installerError, installerStatusError = readInstallerFailure()
+  if installerStatusError then return fail(installerStatusError, checkInstallerStatus) end
+  if installerError then
+    local function acknowledgeFailure()
+      local ok, written = pcall(g_resources.writeFileContentsToWorkDir, '.update/status.json',
+        '{"status":"acknowledged"}')
+      if not ok or not written then
+        return fail('Unable to acknowledge the previous update failure.', acknowledgeFailure)
+      end
+      checkForUpdate()
+    end
+    return fail('The previous update installation failed and was rolled back.\n\n' .. installerError,
+      acknowledgeFailure)
+  end
+  checkForUpdate()
 end
 
 function Updater.init(loadModulesFunc)
@@ -172,32 +272,29 @@ function Updater.init(loadModulesFunc)
   updaterWindow = g_ui.displayUI('updater')
   updaterWindow:show()
   updaterWindow:raise()
-  httpOperationId = HTTP.getJSON(Services.updater, function(envelope, err)
-    if err then
-      g_logger.warning('Desktop update check unavailable: ' .. tostring(err))
-      return finishWithoutUpdate()
-    end
-    local payload, validationError = Updater.validateEnvelope(envelope)
-    if not payload then
-      return fail(validationError)
-    end
-    if not Updater.isUpdateAvailable(payload, readLocalRelease()) then
-      return finishWithoutUpdate()
-    end
-    offerUpdate(payload)
-  end)
+  checkInstallerStatus()
 end
 
 function Updater.terminate()
+  checkGeneration = checkGeneration + 1
+  downloadGeneration = downloadGeneration + 1
   HTTP.cancel(httpOperationId)
+  closeErrorWindow()
   closeWindow()
   loadModulesFunction = nil
 end
 
 function Updater.abort()
-  finishWithoutUpdate()
+  downloadGeneration = downloadGeneration + 1
+  fail('The update download was canceled.', Updater.install)
 end
 
 function Updater.install()
-  downloadUpdate()
+  closeErrorWindow()
+  downloadGeneration = downloadGeneration + 1
+  downloadUpdate(downloadGeneration)
+end
+
+function Updater.exit()
+  exitClient()
 end

@@ -36,9 +36,15 @@ MCowBQYDK2VwAyEAHmXfV/TVMnijkVUC09VHaB+VqueWPpPbJqQ8zsL9N6w=
 ## Client Behavior
 
 - Windows checks automatically at startup. Other platforms continue immediately.
-- An unavailable API does not prevent login.
-- Invalid signed metadata is shown as an error and is never installed.
-- The player can update immediately or continue with the installed release.
+- A validated response with no newer release continues to login normally.
+- Windows updates are mandatory when available; the player can update or exit, but
+  cannot continue with the installed release.
+- Check, metadata validation, download, staging, and installer-launch errors offer
+  Retry or Exit only. They never load the normal client modules.
+- Canceling a download returns to the same Retry-or-Exit state.
+- Installer failures restore the backup, restart into the updater gate, and report
+  the failure with Retry or Exit before making another update check.
+- Invalid signed metadata is never installed.
 - Downloads are checked with SHA-256 before extraction.
 - The signed archive is staged under `.update/`.
 - `updater/install-update.ps1` waits for the client to exit, locks the installation,

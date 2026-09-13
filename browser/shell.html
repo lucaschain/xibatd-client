@@ -6,6 +6,20 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
     />
+    <meta
+      name="xibat-browser-revision"
+      content="__XIBAT_BROWSER_REVISION__"
+    />
+    <base id="xibat-browser-base" href="./" />
+    <script>
+      const XIBAT_BROWSER_REVISION = document.querySelector(
+        'meta[name="xibat-browser-revision"]',
+      ).content;
+      if (/^[0-9a-f]{40}$/.test(XIBAT_BROWSER_REVISION)) {
+        document.getElementById("xibat-browser-base").href =
+          `/releases/${XIBAT_BROWSER_REVISION}/`;
+      }
+    </script>
     <title>Loading</title>
     <style>
       body {
@@ -56,6 +70,30 @@
         font-size: 2rem;
         display: none;
       }
+      #update-required {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.88);
+        color: white;
+        font-family: "Roboto", Helvetica, sans-serif;
+      }
+      #update-required.visible {
+        display: grid;
+      }
+      #update-required > div {
+        max-width: 28rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      #update-required button {
+        margin-top: 1rem;
+        padding: 0.7rem 1.5rem;
+        font: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -66,6 +104,15 @@
       virtualkeyboardpolicy="manual"
     ></div>
     <button id="start" onclick="startGame()">Start</button>
+    <div id="update-required" role="dialog" aria-modal="true">
+      <div>
+        <h1>Client update required</h1>
+        <p id="update-required-message">
+          Reload to use the latest client files. Your settings will be preserved.
+        </p>
+        <button id="reload-client" onclick="reloadForUpdate()">Reload</button>
+      </div>
+    </div>
     <canvas
       class="backbuffer"
       id="canvas"
@@ -225,6 +272,8 @@
       let persistentStorageSyncInFlight = false;
       let persistentStorageSyncPending = false;
       let persistentStorageSyncWaiters = [];
+      let persistentStorageReady = false;
+      let persistentStorageLoadFailed = false;
 
       function requestPersistentStorageSync(callback) {
         if (callback) persistentStorageSyncWaiters.push(callback);
@@ -264,18 +313,99 @@
         };
         sync();
       }
+      let pendingBrowserRevision = null;
+
+      function requireBrowserReload(revision) {
+        if (pendingBrowserRevision) return;
+        pendingBrowserRevision = revision;
+        setGameFullscreen(false);
+        document.getElementById("update-required").classList.add("visible");
+      }
+
+      async function checkBrowserRevision() {
+        if (
+          pendingBrowserRevision ||
+          !/^[0-9a-f]{40}$/.test(XIBAT_BROWSER_REVISION)
+        ) {
+          return;
+        }
+
+        try {
+          const response = await fetch("/revision.json", {
+            cache: "no-store",
+            credentials: "same-origin",
+          });
+          if (!response.ok) return;
+          const release = await response.json();
+          if (
+            release &&
+            /^[0-9a-f]{40}$/.test(release.revision) &&
+            release.revision !== XIBAT_BROWSER_REVISION
+          ) {
+            requireBrowserReload(release.revision);
+          }
+        } catch (error) {
+          console.warn("Could not check for a browser client update.", error);
+        }
+      }
+
+      function reloadForUpdate() {
+        if (!pendingBrowserRevision) return;
+        const button = document.getElementById("reload-client");
+        const message = document.getElementById("update-required-message");
+        if (!persistentStorageReady) {
+          if (!persistentStorageLoadFailed) {
+            message.textContent = "Settings are still loading. Retry in a moment.";
+            return;
+          }
+
+          button.disabled = true;
+          message.textContent = "Loading settings...";
+          FS.syncfs(true, function (error) {
+            button.disabled = false;
+            if (error) {
+              message.textContent =
+                "Settings could not be loaded. Check browser storage and retry.";
+              return;
+            }
+            persistentStorageLoadFailed = false;
+            persistentStorageReady = true;
+            reloadForUpdate();
+          });
+          return;
+        }
+        button.disabled = true;
+        message.textContent = "Saving settings...";
+        let finished = false;
+        const timeout = setTimeout(function () {
+          if (finished) return;
+          finished = true;
+          button.disabled = false;
+          message.textContent =
+            "Settings could not be saved. Check browser storage and retry.";
+        }, 10000);
+
+        requestPersistentStorageSync(function (error) {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timeout);
+          if (error) {
+            button.disabled = false;
+            message.textContent =
+              "Settings could not be saved. Check browser storage and retry.";
+            return;
+          }
+          window.location.replace(
+            `/?revision=${encodeURIComponent(pendingBrowserRevision)}`,
+          );
+        });
+      }
 
       var Module = {
         setGameFullscreen: setGameFullscreen,
         requestPersistentStorageSync: requestPersistentStorageSync,
         locateFile: function (path) {
-          const baseURL =
-            window.location.origin +
-            window.location.pathname.substring(
-              0,
-              window.location.pathname.lastIndexOf("/")
-            );
-          return baseURL + "/" + path;
+          return new URL(path, document.baseURI).href;
         },
         preRun: [
           function () {
@@ -284,7 +414,10 @@
             FS.mount(IDBFS, { autoPersist: true }, "/user");
             FS.syncfs(true, function (err) {
               if (err) {
+                persistentStorageLoadFailed = true;
                 Module.print(err);
+              } else {
+                persistentStorageReady = true;
               }
               removeRunDependency("syncfs");
             });
@@ -324,6 +457,12 @@
           document.getElementById("title-text").innerHTML = "Initializing...";
         },
       };
+      window.setInterval(checkBrowserRevision, 60000);
+      window.addEventListener("focus", checkBrowserRevision);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") checkBrowserRevision();
+      });
+      checkBrowserRevision();
       function warnBeforeUnload(event) {
         event.preventDefault();
         event.returnValue = "";

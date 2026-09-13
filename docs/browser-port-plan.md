@@ -299,6 +299,10 @@ The initial build preloads `data`, `mods`, and `modules`, while the WASM heap is
 fixed at 1 GiB. This can be used for early connectivity work but is not the
 desired production delivery model.
 
+Production bundles already pin HTML, JavaScript, WASM, modules, and preloaded
+data to one immutable Git revision. Open clients detect a newer production
+revision and require a reload after synchronizing persistent `/user` storage.
+
 Required work:
 
 - Measure which assets are needed before the login screen and before entering a
@@ -313,8 +317,6 @@ Required work:
 - Flush completed install transactions before reporting success.
 - Handle quota exhaustion, interrupted installs, stale versions, and browser
   storage eviction.
-- Add cache versioning so a deployment does not combine incompatible JS, WASM,
-  modules, and data packages.
 - Revisit the fixed 1 GiB heap after asset loading no longer requires the full
   preload.
 

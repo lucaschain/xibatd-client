@@ -35,12 +35,28 @@ function Resolve-ManagedPath {
     return $fullPath
 }
 
+function Write-UpdateStatus {
+    param([string]$Root, [hashtable]$Status)
+
+    New-Item -ItemType Directory -Force -Path $Root | Out-Null
+    $statusPath = Join-Path $Root 'status.json'
+    $temporaryPath = Join-Path $Root 'status.json.new'
+    try {
+        $json = $Status | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($temporaryPath, $json, [Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $temporaryPath -Destination $statusPath -Force
+    } finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $installRoot = [IO.Path]::GetFullPath($InstallDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $stageRoot = [IO.Path]::GetFullPath($StageDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $updateRoot = Join-Path $installRoot '.update'
-if (-not $stageRoot.StartsWith(($updateRoot + [IO.Path]::DirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The update stage must be inside the installation update directory.'
-}
+try {
+    if (-not $stageRoot.StartsWith(($updateRoot + [IO.Path]::DirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The update stage must be inside the installation update directory.'
+    }
 
 $manifestPath = Join-Path $stageRoot 'managed-files.json'
 $releasePath = Join-Path $stageRoot 'update-release.json'
@@ -108,7 +124,7 @@ try {
 
         Copy-Item -LiteralPath $manifestPath -Destination $oldManifestPath -Force
         Copy-Item -LiteralPath $releasePath -Destination (Join-Path $installRoot 'update-release.json') -Force
-        Set-Content -LiteralPath (Join-Path $updateRoot 'status.json') -Encoding UTF8 -Value '{"status":"installed"}'
+        Write-UpdateStatus $updateRoot @{ status = 'installed' }
     } catch {
         $installError = $_
         foreach ($relative in $created) {
@@ -119,12 +135,6 @@ try {
             $destination = Resolve-ManagedPath $installRoot $relative
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
             Copy-Item -LiteralPath $backup -Destination $destination -Force
-        }
-        @{ status = 'rolled_back'; error = $installError.Exception.Message } |
-            ConvertTo-Json -Compress |
-            Set-Content -LiteralPath (Join-Path $updateRoot 'status.json') -Encoding UTF8
-        if (-not $SkipRestart) {
-            Start-Process -FilePath (Join-Path $installRoot 'otclient.exe') -WorkingDirectory $installRoot
         }
         throw $installError
     }
@@ -139,4 +149,17 @@ Remove-Item -LiteralPath (Join-Path $updateRoot 'package.zip') -Force -ErrorActi
 Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
 if (-not $SkipRestart) {
     Start-Process -FilePath (Join-Path $installRoot 'otclient.exe') -WorkingDirectory $installRoot
+}
+} catch {
+    $installError = $_
+    try {
+        Write-UpdateStatus $updateRoot @{ status = 'rolled_back'; error = $installError.Exception.Message }
+    } catch {
+        [Console]::Error.WriteLine("Unable to record update failure: $($_.Exception.Message)")
+    }
+    if (-not $SkipRestart) {
+        Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        Start-Process -FilePath (Join-Path $installRoot 'otclient.exe') -WorkingDirectory $installRoot
+    }
+    throw $installError
 }

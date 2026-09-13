@@ -43,6 +43,10 @@ try {
     if (-not $protectedRejected) {
         throw 'A mixed-case protected asset path was accepted.'
     }
+    $failureStatus = Get-Content -LiteralPath (Join-Path $install '.update\status.json') -Raw | ConvertFrom-Json
+    if ($failureStatus.status -ne 'rolled_back') {
+        throw 'A preflight failure did not record rolled-back updater status.'
+    }
 
     $rollbackStage = Join-Path $install '.update\stage-4'
     New-Item -ItemType Directory -Force -Path $rollbackStage | Out-Null
@@ -55,6 +59,10 @@ try {
     } catch {
         if ((Get-Content -LiteralPath (Join-Path $install 'otclient.exe') -Raw).Trim() -ne 'new executable') {
             throw 'Rollback did not restore the installed executable.'
+        }
+        $failureStatus = Get-Content -LiteralPath (Join-Path $install '.update\status.json') -Raw | ConvertFrom-Json
+        if ($failureStatus.status -ne 'rolled_back' -or -not $failureStatus.error) {
+            throw 'A replacement failure did not record its rollback error.'
         }
     }
 

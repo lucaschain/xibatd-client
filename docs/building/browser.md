@@ -55,6 +55,11 @@ immutable, SHA-256-verified deployment manifest. Downloaded client assets are
 installed under the browser's persistent `/user` filesystem rather than the
 read-only packaged work directory.
 
+Published HTML pins JavaScript, WebAssembly, and packaged data requests to its
+Git revision. Open clients poll the mutable release marker and require a reload
+when production activates a newer revision. Reload synchronizes `/user` first;
+application updates do not clear preferences or downloaded client assets.
+
 ## Configure WebSockets
 
 Browser builds require explicit login and world WebSocket endpoints in the
