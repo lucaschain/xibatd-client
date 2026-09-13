@@ -40,16 +40,28 @@ UIWindow
     id: clock
     anchors.left: accent.right
     anchors.right: parent.right
-    anchors.bottom: parent.bottom
+    anchors.top: parent.top
     margin-left: 12
     margin-right: 10
-    margin-bottom: 6
+    margin-top: 35
     font: verdana-11px-rounded
     color: #f4d08a
     text: 01:24
     text-align: center
     text-auto-resize: true
     phantom: true
+
+  Button
+    id: startWaveButton
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 60
+    margin-left: 12
+    margin-right: 12
+    height: 22
+    text: Start Wave Now
+    visible: false
 
   UIButton
     id: closeButton

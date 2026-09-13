@@ -1,4 +1,5 @@
 local TIMER_OPCODE = modules.game_xibat_core.XibatOpcode.RaidTimer
+local RAID_OPCODE = modules.game_xibat_core.XibatOpcode.RaidSelector
 local TICK_INTERVAL = 1000
 local MAX_TITLE_LENGTH = 64
 local TIMER_SETTINGS = 'xibatRaidTimer'
@@ -17,7 +18,11 @@ function raidTimerController:clearTimer()
     end
 
     self.deadline = nil
+    self.preparation = nil
+    self.skipPending = false
     if self.ui then
+        self.ui.startWaveButton:hide()
+        self.ui:setHeight(58)
         self.ui:hide()
     end
 end
@@ -51,6 +56,7 @@ function raidTimerController:updateTimer()
 
     if secondsLeft == 0 then
         self.deadline = nil
+        self.preparation = nil
         self.timerEvent = nil
         self.ui:hide()
         return false
@@ -59,9 +65,13 @@ function raidTimerController:updateTimer()
     return true
 end
 
-function raidTimerController:startTimer(title, deadline)
+function raidTimerController:startTimer(title, deadline, preparation)
     self:clearTimer()
     self.deadline = deadline
+    self.preparation = preparation
+    self.ui.startWaveButton:setVisible(preparation ~= nil)
+    self.ui.startWaveButton:setEnabled(true)
+    self.ui:setHeight(preparation and 90 or 58)
     self.ui.title:setText(title)
     self.ui:show()
 
@@ -87,12 +97,29 @@ function raidTimerController:onTimerOpcode(_, _, payload)
         return
     end
 
-    self:startTimer(payload.name, payload.expires)
+    local preparation = payload.preparation
+    if preparation ~= nil and (type(preparation) ~= 'string' or #preparation > 80 or
+        not preparation:match('^%d+:%d+:%d+$')) then
+        return
+    end
+    self:startTimer(payload.name, payload.expires, preparation)
+end
+
+function raidTimerController:startWaveNow()
+    if not self.preparation or self.skipPending or not self.deadline or self.deadline <= os.time() then return end
+    local protocol = g_game.getProtocolGame()
+    if not protocol then return end
+    self.skipPending = true
+    self.ui.startWaveButton:setEnabled(false)
+    protocol:sendExtendedJSONOpcode(RAID_OPCODE, {
+        action = 'startWave', body = { preparation = self.preparation }
+    })
 end
 
 function raidTimerController:onInit()
     self:restorePosition()
     self.ui.closeButton.onClick = function() self:dismissTimer() return true end
+    self.ui.startWaveButton.onClick = function() self:startWaveNow() return true end
     self.ui.onDragLeave = function(widget) self:onTimerMoved(widget) end
     self.ui:hide()
     self:registerExtendedJSONOpcode(TIMER_OPCODE, function(...)

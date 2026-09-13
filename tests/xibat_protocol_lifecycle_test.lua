@@ -136,11 +136,17 @@ end
 local timerEnvironment = {
     modules = {
         game_xibat_core = {
-            XibatOpcode = { RaidTimer = 204 },
+            XibatOpcode = { RaidTimer = 204, RaidSelector = 207 },
         },
     },
     Controller = {},
     g_settings = {},
+    g_game = { getProtocolGame = function()
+        return { sendExtendedJSONOpcode = function(_, opcode, payload)
+            timerState.sent = { opcode = opcode, payload = payload }
+            timerState.sendCount = (timerState.sendCount or 0) + 1
+        end }
+    end },
     os = {
         time = function()
             return timerState.now
@@ -195,7 +201,13 @@ local timerUI = {
     title = makeLabel(),
     clock = makeLabel(),
     closeButton = {},
+    startWaveButton = {
+        hide = function(self) self.visible = false end,
+        setVisible = function(self, visible) self.visible = visible end,
+        setEnabled = function(self, enabled) self.enabled = enabled end,
+    },
 }
+function timerUI:setHeight(height) self.height = height end
 function timerUI:hide() self.visible = false end
 function timerUI:show() self.visible = true end
 function timerUI:breakAnchors() self.anchorsBroken = true end
@@ -215,6 +227,8 @@ local malformedTimers = {
     { action = "start", name = 1, expires = "soon" },
     { action = "start", name = "Invalid", expires = 0 / 0 },
     { action = "start", name = "Invalid", expires = math.huge },
+    { action = "start", name = "Invalid", expires = 1090, preparation = {} },
+    { action = "start", name = "Invalid", expires = 1090, preparation = "bad" },
 }
 for _, payload in ipairs(malformedTimers) do
     local ok = pcall(timerState.callbacks[204], nil, 204, payload)
@@ -242,6 +256,36 @@ requireValue(not timerUI.visible and activeEvents() == 0, "timer stop retained U
 timerState.callbacks[204](nil, 204, { action = "start", name = "Time Left", expires = 1100 })
 timerController:onGameEnd()
 requireValue(not timerUI.visible and activeEvents() == 0, "game end retained timer state")
+
+timerState.callbacks[204](nil, 204, { action = 'start', name = 'Starting In', expires = 1090,
+    preparation = '42:2:0' })
+requireValue(timerUI.startWaveButton.visible and timerUI.height == 90 and timerUI.clock.text == '01:30',
+    'owner preparation did not show the button beneath its countdown')
+timerUI.startWaveButton.onClick()
+timerUI.startWaveButton.onClick()
+requireValue(timerState.sendCount == 1 and timerState.sent.opcode == 207 and
+    timerState.sent.payload.action == 'startWave' and timerState.sent.payload.body.preparation == '42:2:0' and
+    not timerUI.startWaveButton.enabled, 'skip request lost its identity or allowed duplicate clicks')
+timerState.callbacks[204](nil, 204, { action = 'start', name = 'Time Left', expires = 1090 })
+requireValue(not timerUI.startWaveButton.visible and timerUI.height == 58 and not timerController.preparation,
+    'combat timer retained skip permission')
+timerUI.startWaveButton.onClick()
+requireValue(timerState.sendCount == 1, 'combat timer allowed a skip request')
+timerState.callbacks[204](nil, 204, { action = 'start', name = 'Starting In', expires = 1090 })
+requireValue(not timerUI.startWaveButton.visible, 'non-owner preparation exposed the button')
+timerState.callbacks[204](nil, 204, { action = 'start', name = 'Starting In', expires = 1090,
+    preparation = '42:2:1' })
+requireValue(timerUI.startWaveButton.enabled, 'next preparation retained pending state')
+timerController:onGameEnd()
+requireValue(not timerController.preparation and not timerUI.startWaveButton.visible and activeEvents() == 0,
+    'disconnect retained preparation permission')
+timerState.callbacks[204](nil, 204, { action = 'start', name = 'Starting In', expires = 1090,
+    preparation = '42:2:1' })
+requireValue(timerUI.startWaveButton.visible, 'reconnect snapshot did not restore permission')
+timerState.now = 1090
+timerUI.startWaveButton.onClick()
+requireValue(timerState.sendCount == 1, 'expired timer sent a request')
+timerController:onGameEnd()
 
 local selectorState = {
     callbacks = {},
