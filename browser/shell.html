@@ -61,15 +61,6 @@
         -ms-user-select: none; /* IE 10 and IE 11 */
         user-select: none; /* Standard syntax */
       }
-      #start {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 3;
-        font-size: 2rem;
-        display: none;
-      }
       #update-required {
         position: fixed;
         inset: 0;
@@ -103,7 +94,6 @@
       contenteditable
       virtualkeyboardpolicy="manual"
     ></div>
-    <button id="start" onclick="startGame()">Start</button>
     <div id="update-required" role="dialog" aria-modal="true">
       <div>
         <h1>Client update required</h1>
@@ -232,7 +222,7 @@
         }
       }
       function startGame() {
-        document.getElementById("start").style.display = "none";
+        canvas.focus();
         callMain();
         document.addEventListener("touchstart", function (ev) {
           ev.preventDefault();
@@ -402,6 +392,7 @@
       }
 
       var Module = {
+        onRuntimeInitialized: startGame,
         setGameFullscreen: setGameFullscreen,
         requestPersistentStorageSync: requestPersistentStorageSync,
         locateFile: function (path) {
@@ -445,7 +436,6 @@
           let display = "";
           if (text.includes("Running...")) {
             display = "Loading...";
-            document.getElementById("start").style.display = "block";
           } else if (text.includes("Downloading data...")) {
             display = text;
           }
