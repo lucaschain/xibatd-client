@@ -921,7 +921,7 @@ elseif(WASM)
           -lwebsocket.js
           -sEXPORTED_RUNTIME_METHODS=ccall
           "-sEXPORTED_FUNCTIONS=${_WASM_EXPORTED_FUNCTIONS}"
-          -sINCOMING_MODULE_JS_API=[locateFile,preRun,postRun,print,printErr,canvas,setStatus,monitorRunDependencies]
+          -sINCOMING_MODULE_JS_API=[locateFile,preRun,postRun,print,printErr,canvas,setStatus,monitorRunDependencies,onRuntimeInitialized]
           -sFORCE_FILESYSTEM
           -sMALLOC=dlmalloc
           "-sSUPPORT_LONGJMP=${_WASM_LONGJMP_MODE}"

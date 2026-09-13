@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,15 @@ from package_browser_release import REQUIRED_FILES, REVISION_MARKER, prepare_bun
 
 class BrowserReleaseTest(unittest.TestCase):
     revision = "a" * 40
+
+    def test_automatic_start_callback_is_included_in_runtime(self):
+        shell = (ROOT / "browser" / "shell.html").read_text(encoding="utf-8")
+        cmake = (ROOT / "src" / "CMakeLists.txt").read_text(encoding="utf-8")
+        incoming_api = re.search(r"-sINCOMING_MODULE_JS_API=\[([^]]+)\]", cmake)
+        self.assertIsNotNone(incoming_api)
+        self.assertIn("onRuntimeInitialized", incoming_api.group(1).split(","))
+        self.assertIn("onRuntimeInitialized: startGame", shell)
+        self.assertIn("-sINVOKE_RUN=0", cmake)
 
     def make_bundle(self) -> Path:
         temporary = tempfile.TemporaryDirectory()
