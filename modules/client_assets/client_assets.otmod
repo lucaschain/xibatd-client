@@ -4,4 +4,5 @@ Module
   author: OTClient team
   website: https://github.com/opentibiabr/otclient
   sandboxed: true
-  scripts: [ client_assets ]
+  scripts: [ asset_revision, client_assets ]
+  @onUnload: terminate()

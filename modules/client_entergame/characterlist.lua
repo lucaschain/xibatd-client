@@ -367,7 +367,7 @@ local function buildCharacters(pinnedLookup)
 end
 
 -- private functions
-local function tryLogin(charInfo, tries)
+local function tryLogin(charInfo, tries, assetsChecked)
     tries = tries or 1
 
     if tries > 50 then
@@ -385,6 +385,27 @@ local function tryLogin(charInfo, tries)
         loginEvent = scheduleEvent(function()
             tryLogin(charInfo, tries + 1)
         end, 100)
+        return
+    end
+
+    local assets = modules.client_assets
+    if not assetsChecked and assets and assets.requiresRevisionCheck and assets.requiresRevisionCheck() then
+        CharacterList.hide()
+        local version = g_game.getClientVersion()
+        assets.ensureClientVersion(version, function(success, message)
+            if not success then
+                displayErrorBox(tr('Login Error'), message or tr('Unable to update game assets. Retry login.'))
+                CharacterList.show()
+                return
+            end
+            g_game.setClientVersion(0)
+            g_game.setClientVersion(version)
+            if not modules.game_things.isLoaded() then
+                CharacterList.show()
+                return
+            end
+            tryLogin(charInfo, tries, true)
+        end)
         return
     end
 

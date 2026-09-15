@@ -1,0 +1,158 @@
+local root = arg[1] or '.'
+dofile(root .. '/modules/corelib/json.lua')
+local function hash(data)
+  local n = 0
+  for i = 1, #data do n = (n * 31 + data:byte(i)) % 4294967296 end
+  return string.format('%064x', n)
+end
+local manifest = { schema = 1, compatibilityVersion = 1098, revision = '2000',
+  archiveUrl = 'https://example.test/assets.zip', archiveSha256 = hash('archive'), files = {} }
+local pair = { ['Tibia.dat'] = 'new dat', ['Tibia.spr'] = 'new spr' }
+for name, data in pairs(pair) do manifest.files[name] = { size = #data, sha256 = hash(data) } end
+local base = 'data/things/1098/'
+
+local function fixture(browser)
+  local files, requests, events, results = {}, {}, {}, {}
+  local fakeWidget
+  fakeWidget = function()
+    return setmetatable({ content = {}, progressFill = {} }, { __index = function(_, key)
+      if key == 'holder' then return nil end
+      if key == 'getWidth' then return function() return 360 end end
+      if key == 'getChildById' then return function() return nil end end
+      return function() end
+    end })
+  end
+  local window
+  local function resourcePath(path) return path:gsub('^/', '') end
+  local function request(kind, url, callback)
+    requests[#requests + 1] = { kind = kind, url = url, callback = callback }
+    return #requests
+  end
+  local env = {
+    json = json, Services = { clientAssets = { repository = false, installInWorkDir = not browser,
+      revisionManifestUrl = 'https://example.test/current.json' } },
+    tr = function(s) return s end,
+    g_logger = { info = function() end, warning = function() end, error = function() end },
+    g_game = { isOnline = function() return false end },
+    g_sprites = { unload = function() end },
+    g_clock = { millis = function() return 1 end },
+    g_crypt = { sha256 = hash },
+    g_ui = { createWidget = fakeWidget },
+    displayCancelBox = function()
+      window = fakeWidget()
+      window.content = fakeWidget()
+      return window
+    end,
+    connect = function(target, callbacks) target.callbacks = callbacks end,
+    scheduleEvent = function(fn, delay) events[#events + 1] = {fn = fn, delay = delay} return #events end,
+    removeEvent = function(id) if events[id] then events[id].removed = true end end,
+    HTTP = { timeout = 30, cancel = function() end,
+      getJSON = function(url, cb) return request('manifest', url, cb) end,
+      download = function(url, path, cb) return request('archive', url, cb) end },
+    g_resources = {
+      getWorkDir = function() return browser and '/user' or 'D:/Test' end,
+      makeDir = function() return true end,
+      fileExists = function(path) return files[resourcePath(path)] ~= nil end,
+      readFileContents = function(path) return assert(files[resourcePath(path)], path) end,
+      writeFileContents = function(path, data) files[resourcePath(path)] = data return true end,
+      fileSha256 = function(path) return files[resourcePath(path)] and hash(files[resourcePath(path)]) or '' end,
+    }
+  }
+  local resources = env.g_resources
+  resources.fileExistsInWorkDir = resources.fileExists
+  resources.readFileContentsFromWorkDir = resources.readFileContents
+  resources.writeFileContentsToWorkDir = resources.writeFileContents
+  resources.fileSha256InWorkDir = resources.fileSha256
+  resources.fileSizeInWorkDir = function(path) return files[path] and #files[path] or -1 end
+  local function extract(_, stage)
+    for name, data in pairs(pair) do files[stage .. name] = data end
+    return true
+  end
+  resources.extractDownloadedArchive = extract
+  resources.extractDownloadedArchiveToWorkDir = extract
+  setmetatable(env, { __index = _G })
+  for _, name in ipairs({ 'asset_revision', 'client_assets' }) do
+    local chunk = assert(loadfile(root .. '/modules/client_assets/' .. name .. '.lua'))
+    setfenv(chunk, env)()
+  end
+  local function ensure()
+    env.ensureClientVersion(1098, function(ok, message) results[#results + 1] = {ok, message} end)
+  end
+  local function install()
+    requests[#requests].callback(manifest)
+    assert(requests[#requests].kind == 'archive')
+    files['downloads/archive.zip'] = 'archive'
+    requests[#requests].callback('archive.zip', nil, nil)
+    for _, event in ipairs(events) do
+      if event.delay == 50 and not event.removed then event.removed = true event.fn() end
+    end
+  end
+  return env, files, requests, results, ensure, install, function() window.callbacks.onCancel() end, events
+end
+
+for _, browser in ipairs({ false, true }) do
+  local env, files, requests, results, ensure, install, cancel, events = fixture(browser)
+  files[base .. 'Tibia.dat'], files[base .. 'Tibia.spr'] = 'old dat', 'old spr'
+  ensure()
+  assert(#requests == 1 and requests[1].kind == 'manifest', 'Existing files bypassed remote check')
+  install()
+  assert(results[1][1] and env.isClientVersionInstalled(1098))
+  assert(files[base .. 'Tibia.dat'] == pair['Tibia.dat'] and files[base .. 'Tibia.spr'] == pair['Tibia.spr'])
+  ensure()
+  assert(requests[#requests].kind == 'manifest', 'Second login skipped current requirement')
+  local count = #requests
+  requests[count].callback(manifest)
+  assert(#requests == count and results[2][1], 'Matching revision downloaded again')
+  ensure()
+  requests[#requests].callback(nil, 'offline')
+  assert(not results[3][1] and not env.isClientVersionInstalled(1098), 'Offline requirement check failed open')
+  ensure()
+  local stale = requests[#requests].callback
+  cancel()
+  assert(not results[4][1])
+  ensure()
+  count = #requests
+  stale(manifest)
+  assert(#requests == count and #results == 4, 'Canceled callback affected the new operation')
+  requests[#requests].callback(manifest)
+  assert(results[5][1])
+  files[base .. 'Tibia.spr'] = 'corruption'
+  ensure()
+  install()
+  assert(results[6][1] and files[base .. 'Tibia.spr'] == pair['Tibia.spr'])
+  ensure()
+  requests[#requests].callback(manifest)
+  assert(results[7][1])
+  files[base .. 'Tibia.dat'] = nil
+  ensure()
+  requests[#requests].callback(manifest)
+  files['downloads/bad.zip'] = 'bad archive'
+  requests[#requests].callback('bad.zip', nil, nil)
+  assert(not results[8][1] and files[base .. 'Tibia.dat'] == nil, 'Bad archive touched live assets')
+  ensure()
+  requests[#requests].callback(manifest)
+  local canceledDownload = requests[#requests].callback
+  cancel()
+  ensure()
+  local before = #requests
+  canceledDownload('archive.zip', nil, nil)
+  assert(#requests == before and #results == 9, 'Canceled archive callback affected a new check')
+  install()
+  assert(results[10][1])
+  manifest.revision = '2001'
+  ensure()
+  install()
+  assert(results[11][1], 'New revision did not install')
+  manifest.revision = '2000'
+  -- A rollback is explicit pointer promotion too; equality, not numeric ordering.
+  ensure()
+  install()
+  assert(results[12][1])
+  ensure()
+  local afterUnload = requests[#requests].callback
+  env.terminate()
+  before = #requests
+  afterUnload(manifest)
+  assert(#requests == before and #results == 12, 'Module unload left a live callback')
+end
+print('Desktop/browser asset revision login flow tests passed')

@@ -691,7 +691,7 @@ function EnterGame.loginFailed(requestId, msg, result)
     onError(nil, msg, result)
 end
 
-function EnterGame.doLogin()
+function EnterGame.doLogin(assetCheck)
     G.account = enterGame:getChildById('accountNameTextEdit'):getText()
     G.password = enterGame:getChildById('accountPasswordTextEdit'):getText()
     G.stayLogged = enterGame:getChildById('stayLoggedBox'):isChecked()
@@ -726,12 +726,16 @@ function EnterGame.doLogin()
     g_settings.set('port', G.port)
     g_settings.set('client-version', clientVersion)
 
-    if modules.client_assets and modules.client_assets.ensureClientVersion and
-        (not modules.client_assets.isEnabled or modules.client_assets.isEnabled()) and
-        not modules.client_assets.isClientVersionInstalled(clientVersion) then
+    if not (type(assetCheck) == 'table' and assetCheck.version == clientVersion and
+        assetCheck.host == G.host and assetCheck.port == G.port) and
+        modules.client_assets and modules.client_assets.ensureClientVersion and
+        (not modules.client_assets.isEnabled or modules.client_assets.isEnabled()) then
+        local checked = { version = clientVersion, host = G.host, port = G.port }
         modules.client_assets.ensureClientVersion(clientVersion, function(success, message)
             if success then
-                EnterGame.doLogin()
+                -- Reset the loader even when only the asset revision changed.
+                g_game.setClientVersion(0)
+                EnterGame.doLogin(checked)
                 return
             end
 

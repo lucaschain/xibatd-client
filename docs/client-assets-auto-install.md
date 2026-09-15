@@ -4,6 +4,69 @@ This document describes the automatic client assets installation flow introduced
 
 ## Goal
 
+### Xiba revision channel (1098 compatibility)
+
+Xiba uses `Services.clientAssets.revisionManifestUrl` for game asset updates.
+The asset revision is an opaque string (initially `2000`), **not** a client or
+protocol version. Client version, protocol version, feature selection, and runtime
+paths stay at 1098. Do not use 2000/10982 as `g_game` versions: upstream numeric
+version checks select newer wire formats and protobuf assets.
+
+Before account login **and** world login/reconnect, the client fetches the current
+manifest with a cache-busting query. The publisher also sets `Cache-Control: no-store`.
+Installed files never bypass this check. A failed check blocks login; retry the login
+to retry the check. Downloads begin automatically when the revision, archive identity,
+file size, or DAT/SPR SHA-256 differs. Cancellation and old asynchronous callbacks
+cannot resume a later login/download operation. Matching revisions do not redownload.
+
+The schema-1 manifest contains `compatibilityVersion`, `revision`, `archiveUrl`,
+`archiveSha256`, and `files` entries for `Tibia.dat`/`Tibia.spr` with `size`/`sha256`.
+Archive URLs must be HTTPS. Both archive and extracted files are verified, independent
+of the upstream fallback settings. Archives contain only `assets/Tibia.dat` and
+`assets/Tibia.spr`; OTFI is editor metadata and the runtime flags remain in
+`modules/game_features/features.lua`.
+
+`modules/client_assets/asset_revision.lua` owns staging, backup, and recovery.
+The archive extracts below `data/things/1098/.asset-update/stage/`, is verified,
+and the previous pair is backed up before a pending journal is written. Live files
+are replaced synchronously, verified, and recorded in `.asset-revision.json`.
+No runtime load/login proceeds with a pending transaction. Failed writes restore
+verified backups; interrupted recovery is retried on the next check. Invalid recovery
+metadata fails closed for inspection. Successful installs empty the temporary copies.
+This is a journaled two-file replacement, not a filesystem-wide atomic rename.
+
+Desktop I/O consistently targets the workdir. Browser I/O targets the writable
+`/user` tree backed by the existing IDBFS `autoPersist` mount. On a new browser session,
+the same revision/hash checks detect missing, incomplete, or corrupted persisted data.
+Browser persistence still depends on storage availability/quota; this Lua path does
+not provide an explicit synchronous IndexedDB flush acknowledgment.
+
+The runtime's resolved DAT/SPR hashes are checked too. A stale user-directory copy
+shadowing a desktop installation blocks login with an explanatory error instead of
+loading different files. Inspect that user-directory copy before removing it.
+After validation, callers reset the client version to 0 then 1098 to force reload even
+when the compatibility version did not change. The zero-version event does not load files.
+
+Publication tooling and promotion commands live in the server repository at
+`infra/client-assets/README.md`. The legacy `manifestUrl` remains the source for
+clients/configurations without `revisionManifestUrl`.
+
+Hermetic tests:
+
+```sh
+luajit tests/client_asset_revision_test.lua .
+luajit tests/client_asset_revision_flow_test.lua .
+luajit tests/client_asset_flags_test.lua .
+luajit tests/client_asset_world_login_test.lua .
+```
+
+`tests/client_asset_smoke.lua` can be run from `otclientrc.lua` in an isolated Windows
+installation/profile. It verifies actual DAT/SPR loading and the custom flags without
+logging into a server. If `release/2000.json` exists in that installation, it also
+exercises native file activation/reload against the prepared asset metadata.
+
+### Upstream modern asset installation
+
 For modern Tibia client versions (>= 1281), OTClient must be able to:
 
 1. Detect missing assets for the selected version.

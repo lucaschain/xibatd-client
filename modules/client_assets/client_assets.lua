@@ -24,6 +24,8 @@ local DEFAULT_CONFIG = {
 
 local activeDownload
 local releasesCache = {}
+local verifiedRevisions = {}
+local revisionRequest = 0
 local ARCHIVE_EXTENSIONS = { '.zip', '.rar' }
 local DOWNLOAD_WINDOW_WIDTH = 360
 local DOWNLOAD_WINDOW_HEIGHT = 140
@@ -1472,10 +1474,123 @@ function isEnabled()
   return cloneConfig().enabled ~= false
 end
 
+function requiresRevisionCheck()
+  local config = cloneConfig()
+  return config.enabled ~= false and config.revisionManifestUrl ~= nil
+end
+
+function terminate()
+  verifiedRevisions = {}
+  if activeDownload then
+    activeDownload.callback = nil
+    if activeDownload.window then activeDownload.window:destroy() end
+    cancelDownload()
+  end
+end
+
+local function revisionStore(config, version)
+  local workDir = shouldInstallInWorkDir(config)
+  local function read(path)
+    if workDir then return g_resources.readFileContentsFromWorkDir(path) end
+    return g_resources.readFileContents('/' .. path)
+  end
+  return AssetRevision.new({
+    exists = function(path)
+      if workDir then return g_resources.fileExistsInWorkDir(path) end
+      return g_resources.fileExists('/' .. path)
+    end,
+    read = read,
+    write = function(path, contents) return writeInstallFile(config, path, contents) end,
+    hash = function(path)
+      if workDir then return g_resources.fileSha256InWorkDir(path) end
+      return g_resources.fileSha256('/' .. path)
+    end,
+    size = function(path)
+      if workDir then return g_resources.fileSizeInWorkDir(path) end
+      local ok, data = pcall(read, path)
+      return ok and #data or -1
+    end,
+    encode = json.encode,
+    decode = json.decode
+  }, version)
+end
+
+local function ensureAssetRevision(config, version, callback)
+  if activeDownload then return callback(false, 'Another asset check is already running.') end
+  if g_game.isOnline() then return callback(false, 'Log out before updating game assets.') end
+  verifiedRevisions[version] = nil
+  revisionRequest = revisionRequest + 1
+  local request = { version = version, callback = callback, canceled = false }
+  activeDownload = request
+  request.window = createDownloadWindow()
+  connect(request.window, { onCancel = cancelDownload })
+  setDownloadBusy('Checking game assets')
+
+  -- Fence every delayed callback by operation identity, including callbacks that
+  -- arrive after cancellation and a subsequent login attempt.
+  local function alive() return activeDownload == request and not request.canceled end
+  local function guarded(fn)
+    return function(...)
+      if not alive() then return end
+      local ok, err = pcall(fn, ...)
+      if not ok and alive() then finishDownload(false, tostring(err)) end
+    end
+  end
+  local store = revisionStore(config, version)
+  local function accept(manifest)
+    -- The writable user directory can shadow a desktop workdir installation.
+    -- Never approve a pair different from what the actual runtime will read.
+    for _, name in ipairs({ 'Tibia.dat', 'Tibia.spr' }) do
+      local path = string.format('/data/things/%d/%s', version, name)
+      assert(g_resources.fileSha256(path) == manifest.files[name].sha256,
+          'Another asset copy shadows the installed update: ' .. path .. '. Check the client user directory.')
+    end
+    verifiedRevisions[version] = manifest
+    finishDownload(true)
+  end
+  local separator = config.revisionManifestUrl:find('?', 1, true) and '&' or '?'
+  local url = config.revisionManifestUrl .. separator .. 'check=' .. os.time() .. '-' .. revisionRequest
+  request.operationId = httpGetJSON(config, url, guarded(function(manifest, err)
+    request.operationId = nil
+    if err then return finishDownload(false, 'Unable to check game assets. Retry login.\n' .. tostring(err)) end
+    local valid, validationError = AssetRevision.validate(manifest, version)
+    if not valid then return finishDownload(false, validationError) end
+    store.recover()
+    if store.current(manifest) then
+      return accept(manifest)
+    end
+    setDownloadBusy('Downloading game assets', 'Revision ' .. manifest.revision)
+    request.operationId = httpDownload(config, manifest.archiveUrl,
+        'asset-downloads/' .. version .. '/' .. manifest.archiveSha256 .. '.zip',
+        guarded(function(path, checksum, downloadError)
+          request.operationId = nil
+          if downloadError then return finishDownload(false, downloadError) end
+          setDownloadBusy('Verifying game assets')
+          local ok, hashError = verifyDownloadedSha256(path, manifest.archiveSha256)
+          if not ok then return finishDownload(false, hashError) end
+          scheduleEvent(guarded(function()
+            store.install(manifest, function(stage)
+              return extractDownloadedArchive(config, path, stage, 'assets', true)
+            end)
+            assert(store.current(manifest), 'Asset revision could not be verified after installation.')
+            accept(manifest)
+          end), 50)
+        end), guarded(function(progress)
+          if progress then setDownloadProgress('Downloading game assets', progress) end
+        end))
+  end))
+end
+
 function isClientVersionInstalled(version)
   version = tonumber(version)
   if not version then
     return false
+  end
+
+  local config = cloneConfig()
+  if config.enabled ~= false and config.revisionManifestUrl then
+    -- Do not let login-screen previews load an unverified/interrupted pair.
+    return verifiedRevisions[version] ~= nil
   end
 
   if version >= 1281 then
@@ -1506,6 +1621,9 @@ function ensureClientVersion(version, callback)
   end
 
   local config = cloneConfig()
+  if config.enabled ~= false and config.revisionManifestUrl then
+    return ensureAssetRevision(config, version, callback)
+  end
   if config.enabled == false or isClientVersionInstalled(version) then
     return callback(true)
   end

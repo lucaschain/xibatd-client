@@ -42,6 +42,10 @@ local function tryLoadDatWithFallbacks(datPath)
 end
 
 local function load(version)
+    if version == 0 then
+        loaded = false
+        return
+    end
     local errorList = {}
 
     if version >= 1281 and not g_game.getFeature(GameLoadSprInsteadProtobuf) then
