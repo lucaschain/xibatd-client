@@ -39,6 +39,14 @@ function AssetRevision.new(io, version)
     assert(io.write(path, data), 'Unable to write asset file: ' .. path)
   end
 
+  local function copy(source, destination)
+    if io.copy then
+      assert(io.copy(source, destination), 'Unable to copy asset file: ' .. destination)
+    else
+      write(destination, io.read(source))
+    end
+  end
+
   local function matches(directory, manifest)
     for _, name in ipairs(names) do
       local metadata = manifest.files[name]
@@ -76,7 +84,7 @@ function AssetRevision.new(io, version)
       end
     end
     for _, name in ipairs(names) do
-      if pending.previous[name] then write(base .. name, io.read(backup .. name)) end
+      if pending.previous[name] then copy(backup .. name, base .. name) end
     end
     for _, name in ipairs(names) do
       local previous = pending.previous[name]
@@ -100,9 +108,8 @@ function AssetRevision.new(io, version)
     local pending = { previous = {} }
     for _, name in ipairs(names) do
       if io.exists(base .. name) then
-        local contents = io.read(base .. name)
-        write(backup .. name, contents)
-        pending.previous[name] = { size = #contents, sha256 = io.hash(base .. name) }
+        copy(base .. name, backup .. name)
+        pending.previous[name] = { size = io.size(base .. name), sha256 = io.hash(base .. name) }
         assert(io.hash(backup .. name) == pending.previous[name].sha256, 'Unable to verify asset backup.')
       end
     end
@@ -110,7 +117,7 @@ function AssetRevision.new(io, version)
     -- writes live under /user (IDBFS autoPersist); recovery tolerates partial saves.
     write(journal, io.encode(pending))
     local ok, err = pcall(function()
-      for _, name in ipairs(names) do write(base .. name, io.read(stage .. name)) end
+      for _, name in ipairs(names) do copy(stage .. name, base .. name) end
       assert(matches(base, manifest), 'Installed DAT/SPR size or SHA-256 mismatch.')
       write(marker, io.encode(manifest))
       write(journal, '')

@@ -29,12 +29,32 @@ local function fixture(browser)
     return #requests
   end
   local env = {
+    io = { open = function(path, mode)
+      local key = resourcePath(path)
+      local data = files[key]
+      if mode == 'wb' then files[key] = '' elseif not data then return nil end
+      local cursor = 1
+      return {
+        seek = function(_, where) assert(where == 'end') return #data end,
+        read = function(_, size)
+          assert(size <= 64 * 1024, 'Browser file copies must use bounded chunks')
+          if cursor > #data then return nil end
+          local chunk = data:sub(cursor, cursor + size - 1)
+          cursor = cursor + #chunk
+          return chunk
+        end,
+        write = function(_, chunk) files[key] = files[key] .. chunk return true end,
+        close = function() return true end
+      }
+    end },
     json = json, Services = { clientAssets = { repository = false, installInWorkDir = not browser,
       revisionManifestUrl = 'https://example.test/current.json' } },
     tr = function(s) return s end,
     g_logger = { info = function() end, warning = function() end, error = function() end },
     g_game = { isOnline = function() return false end },
-    g_sprites = { unload = function() end },
+    g_sprites = { isLoaded = function() return false end },
+    g_platform = { isBrowser = function() return browser end },
+    g_app = { exit = function() error('Unexpected browser reload') end },
     g_clock = { millis = function() return 1 end },
     g_crypt = { sha256 = hash },
     g_ui = { createWidget = fakeWidget },
@@ -51,6 +71,7 @@ local function fixture(browser)
       download = function(url, path, cb) return request('archive', url, cb) end },
     g_resources = {
       getWorkDir = function() return browser and '/user' or 'D:/Test' end,
+      getRealPath = function(path) return path end,
       makeDir = function() return true end,
       fileExists = function(path) return files[resourcePath(path)] ~= nil end,
       readFileContents = function(path) return assert(files[resourcePath(path)], path) end,
@@ -76,7 +97,9 @@ local function fixture(browser)
     setfenv(chunk, env)()
   end
   local function ensure()
-    env.ensureClientVersion(1098, function(ok, message) results[#results + 1] = {ok, message} end)
+    env.ensureClientVersion(1098, function(ok, message, reloadRequired)
+      results[#results + 1] = {ok, message, reloadRequired}
+    end)
   end
   local function install()
     requests[#requests].callback(manifest)
@@ -97,12 +120,23 @@ for _, browser in ipairs({ false, true }) do
   assert(#requests == 1 and requests[1].kind == 'manifest', 'Existing files bypassed remote check')
   install()
   assert(results[1][1] and env.isClientVersionInstalled(1098))
+  assert(results[1][3] == true, 'Fresh assets did not request a reload')
   assert(files[base .. 'Tibia.dat'] == pair['Tibia.dat'] and files[base .. 'Tibia.spr'] == pair['Tibia.spr'])
+  if browser then
+    local originalRead = env.g_resources.readFileContents
+    env.g_resources.readFileContents = function(path)
+      assert(not path:match('Tibia%.spr$'), 'Browser metadata check copied the entire loaded SPR into Lua')
+      return originalRead(path)
+    end
+  end
   ensure()
   assert(requests[#requests].kind == 'manifest', 'Second login skipped current requirement')
   local count = #requests
   requests[count].callback(manifest)
   assert(#requests == count and results[2][1], 'Matching revision downloaded again')
+  assert(results[2][3] == false, 'Matching revision requested a redundant reload')
+  -- Later repair/update scenarios intentionally copy file contents during install.
+  env.g_resources.readFileContents = env.g_resources.readFileContentsFromWorkDir
   ensure()
   requests[#requests].callback(nil, 'offline')
   assert(not results[3][1] and not env.isClientVersionInstalled(1098), 'Offline requirement check failed open')
@@ -120,6 +154,7 @@ for _, browser in ipairs({ false, true }) do
   ensure()
   install()
   assert(results[6][1] and files[base .. 'Tibia.spr'] == pair['Tibia.spr'])
+  assert(results[6][3] == true, 'Repaired assets did not request a reload')
   ensure()
   requests[#requests].callback(manifest)
   assert(results[7][1])
@@ -154,5 +189,16 @@ for _, browser in ipairs({ false, true }) do
   before = #requests
   afterUnload(manifest)
   assert(#requests == before and #results == 12, 'Module unload left a live callback')
+  if browser then
+    local reloads = 0
+    env.g_sprites.isLoaded = function() return true end
+    env.g_app.exit = function() reloads = reloads + 1 end
+    files[base .. 'Tibia.dat'] = 'outdated'
+    ensure()
+    before = #requests
+    requests[#requests].callback(manifest)
+    assert(reloads == 1 and #requests == before and #results == 12,
+        'A browser update tried to extract alongside the cached SPR or resumed stale login')
+  end
 end
 print('Desktop/browser asset revision login flow tests passed')

@@ -731,10 +731,12 @@ function EnterGame.doLogin(assetCheck)
         modules.client_assets and modules.client_assets.ensureClientVersion and
         (not modules.client_assets.isEnabled or modules.client_assets.isEnabled()) then
         local checked = { version = clientVersion, host = G.host, port = G.port }
-        modules.client_assets.ensureClientVersion(clientVersion, function(success, message)
+        modules.client_assets.ensureClientVersion(clientVersion, function(success, message, reloadRequired)
             if success then
-                -- Reset the loader even when only the asset revision changed.
-                g_game.setClientVersion(0)
+                if reloadRequired or not modules.game_things.isLoaded() then
+                    -- An asset-only change still requires a same-version reload.
+                    g_game.setClientVersion(0)
+                end
                 EnterGame.doLogin(checked)
                 return
             end

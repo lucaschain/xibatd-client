@@ -392,14 +392,16 @@ local function tryLogin(charInfo, tries, assetsChecked)
     if not assetsChecked and assets and assets.requiresRevisionCheck and assets.requiresRevisionCheck() then
         CharacterList.hide()
         local version = g_game.getClientVersion()
-        assets.ensureClientVersion(version, function(success, message)
+        assets.ensureClientVersion(version, function(success, message, reloadRequired)
             if not success then
                 displayErrorBox(tr('Login Error'), message or tr('Unable to update game assets. Retry login.'))
                 CharacterList.show()
                 return
             end
-            g_game.setClientVersion(0)
-            g_game.setClientVersion(version)
+            if reloadRequired or not modules.game_things.isLoaded() then
+                g_game.setClientVersion(0)
+                g_game.setClientVersion(version)
+            end
             if not modules.game_things.isLoaded() then
                 CharacterList.show()
                 return

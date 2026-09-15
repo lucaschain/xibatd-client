@@ -33,8 +33,9 @@ scheduleEvent(protected(function()
     downloads = downloads + 1
     return originalDownload(...)
   end
-  modules.client_assets.ensureClientVersion(1098, protected(function(ok, err)
+  modules.client_assets.ensureClientVersion(1098, protected(function(ok, err, reloadRequired)
     assert(ok, err)
+    assert(reloadRequired, 'Fresh installation did not request a reload')
     assert(downloads == 1, 'Outdated installation did not download exactly one archive')
     g_game.setClientVersion(0)
     g_game.setClientVersion(1098)
@@ -44,8 +45,9 @@ scheduleEvent(protected(function()
         GameIdleAnimations, GameDoubleSoul }) do
       assert(g_game.getFeature(flag), 'Missing compatibility flag: ' .. flag)
     end
-    modules.client_assets.ensureClientVersion(1098, protected(function(current, checkError)
+    modules.client_assets.ensureClientVersion(1098, protected(function(current, checkError, changed)
       assert(current, checkError)
+      assert(changed == false, 'Matching assets requested another reload')
       assert(downloads == 1, 'Matching revision was downloaded again')
       finish(true, 'HTTPS download, archive extraction, DAT/SPR reload and repeat revision check passed')
     end))

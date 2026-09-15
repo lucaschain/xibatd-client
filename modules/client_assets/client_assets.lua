@@ -736,7 +736,7 @@ local function logArchiveHeartbeat(message)
   logInfo(message)
 end
 
-local function finishDownload(ok, message)
+local function finishDownload(ok, message, reloadRequired)
   local callback = activeDownload and activeDownload.callback
   if ok then
     logInfo(message or 'Asset download finished.')
@@ -749,7 +749,7 @@ local function finishDownload(ok, message)
   end
   activeDownload = nil
   if callback then
-    callback(ok, ok and message or userFacingError(message))
+    callback(ok, ok and message or userFacingError(message), reloadRequired)
   end
 end
 
@@ -1494,6 +1494,23 @@ local function revisionStore(config, version)
     if workDir then return g_resources.readFileContentsFromWorkDir(path) end
     return g_resources.readFileContents('/' .. path)
   end
+  local function copyBrowserFile(source, destination)
+    local input = io.open(g_resources.getRealPath('/' .. source), 'rb')
+    if not input then return false end
+    -- Establish the destination in the writable IDBFS mount before resolving it.
+    if not writeInstallFile(config, destination, '') then input:close() return false end
+    local output = io.open(g_resources.getRealPath('/' .. destination), 'wb')
+    if not output then input:close() return false end
+    local ok = true
+    while true do
+      local chunk, readError = input:read(64 * 1024)
+      if not chunk then ok = readError == nil break end
+      if not output:write(chunk) then ok = false break end
+    end
+    input:close()
+    local closed = output:close()
+    return ok and closed ~= nil
+  end
   return AssetRevision.new({
     exists = function(path)
       if workDir then return g_resources.fileExistsInWorkDir(path) end
@@ -1501,14 +1518,21 @@ local function revisionStore(config, version)
     end,
     read = read,
     write = function(path, contents) return writeInstallFile(config, path, contents) end,
+    copy = not workDir and copyBrowserFile or nil,
     hash = function(path)
       if workDir then return g_resources.fileSha256InWorkDir(path) end
       return g_resources.fileSha256('/' .. path)
     end,
     size = function(path)
       if workDir then return g_resources.fileSizeInWorkDir(path) end
-      local ok, data = pcall(read, path)
-      return ok and #data or -1
+      -- Browser assets are ordinary files in the mounted IDBFS directory. Reading
+      -- the SPR through the Lua binding just to count its bytes creates two full
+      -- file copies and exhausts the fixed WASM heap once sprites are loaded.
+      local file = io.open(g_resources.getRealPath('/' .. path), 'rb')
+      if not file then return -1 end
+      local size = file:seek('end')
+      file:close()
+      return size or -1
     end,
     encode = json.encode,
     decode = json.decode
@@ -1518,6 +1542,7 @@ end
 local function ensureAssetRevision(config, version, callback)
   if activeDownload then return callback(false, 'Another asset check is already running.') end
   if g_game.isOnline() then return callback(false, 'Log out before updating game assets.') end
+  local previousRevision = verifiedRevisions[version]
   verifiedRevisions[version] = nil
   revisionRequest = revisionRequest + 1
   local request = { version = version, callback = callback, canceled = false }
@@ -1537,7 +1562,7 @@ local function ensureAssetRevision(config, version, callback)
     end
   end
   local store = revisionStore(config, version)
-  local function accept(manifest)
+  local function accept(manifest, installed)
     -- The writable user directory can shadow a desktop workdir installation.
     -- Never approve a pair different from what the actual runtime will read.
     for _, name in ipairs({ 'Tibia.dat', 'Tibia.spr' }) do
@@ -1546,7 +1571,9 @@ local function ensureAssetRevision(config, version, callback)
           'Another asset copy shadows the installed update: ' .. path .. '. Check the client user directory.')
     end
     verifiedRevisions[version] = manifest
-    finishDownload(true)
+    local changed = installed == true or not previousRevision or
+        previousRevision.revision ~= manifest.revision or previousRevision.archiveSha256 ~= manifest.archiveSha256
+    finishDownload(true, nil, changed)
   end
   local separator = config.revisionManifestUrl:find('?', 1, true) and '&' or '?'
   local url = config.revisionManifestUrl .. separator .. 'check=' .. os.time() .. '-' .. revisionRequest
@@ -1558,6 +1585,15 @@ local function ensureAssetRevision(config, version, callback)
     store.recover()
     if store.current(manifest) then
       return accept(manifest)
+    end
+    if g_platform.isBrowser() and g_sprites.isLoaded() then
+      -- A live revision change must install on a fresh browser heap: archive
+      -- extraction plus the cached old SPR can exceed the fixed WASM budget.
+      -- Browser exit already saves settings and reloads via the shell's IDBFS sync.
+      request.callback = nil
+      finishDownload(true, 'Reloading browser to install updated game assets.')
+      g_app.exit()
+      return
     end
     setDownloadBusy('Downloading game assets', 'Revision ' .. manifest.revision)
     request.operationId = httpDownload(config, manifest.archiveUrl,
@@ -1573,7 +1609,7 @@ local function ensureAssetRevision(config, version, callback)
               return extractDownloadedArchive(config, path, stage, 'assets', true)
             end)
             assert(store.current(manifest), 'Asset revision could not be verified after installation.')
-            accept(manifest)
+            accept(manifest, true)
           end), 50)
         end), guarded(function(progress)
           if progress then setDownloadProgress('Downloading game assets', progress) end

@@ -44,8 +44,17 @@ not provide an explicit synchronous IndexedDB flush acknowledgment.
 The runtime's resolved DAT/SPR hashes are checked too. A stale user-directory copy
 shadowing a desktop installation blocks login with an explanatory error instead of
 loading different files. Inspect that user-directory copy before removing it.
-After validation, callers reset the client version to 0 then 1098 to force reload even
-when the compatibility version did not change. The zero-version event does not load files.
+After a new installation or revision change, callers reset the client version to 0
+then 1098 to force reload even when the compatibility version did not change.
+Unchanged verified assets are not reloaded when moving from account login to world
+login. The zero-version event does not load files. Browser file-size checks use
+seek-to-end on the physical IDBFS file: reading the entire SPR into a Lua string for
+metadata exhausted the fixed WASM heap after the initial sprite load.
+Browser backup, activation, and recovery copies also stream in bounded chunks.
+If different/corrupt assets are detected after sprites have been loaded, the browser
+saves settings and reloads using its existing exit/IDBFS-sync path. Installation then
+runs on the fresh heap before sprites are loaded. This avoids retaining the old SPR
+alongside archive extraction; auto-login can resume normally after the reload.
 
 Publication tooling and promotion commands live in the server repository at
 `infra/client-assets/README.md`. The legacy `manifestUrl` remains the source for
@@ -64,6 +73,14 @@ luajit tests/client_asset_world_login_test.lua .
 installation/profile. It verifies actual DAT/SPR loading and the custom flags without
 logging into a server. If `release/2000.json` exists in that installation, it also
 exercises native file activation/reload against the prepared asset metadata.
+
+For the browser fixed-heap regression, install Playwright/Chromium into a temporary
+tool directory, then run `tests/browser_asset_memory_test.cjs` with that directory's
+`node_modules` on `NODE_PATH` (and its `PLAYWRIGHT_BROWSERS_PATH`, if configured).
+It loads the published WASM bundle in a fresh context and injects the current source
+Lua locally before startup. It exercises a real asset download, checks with the SPR
+already cached, and automatic browser reload/reinstallation. It never logs into an
+account or modifies production; its synthetic IDBFS contents disappear with the context.
 
 ### Upstream modern asset installation
 
