@@ -23,12 +23,27 @@ local function fixture(browser)
     end })
   end
   local window
+  local env
+  local function drainStorageSyncs()
+    if env.pauseStorageSyncs then return end
+    for _, event in ipairs(events) do
+      if event.delay == 0 and not event.removed then event.removed = true event.fn() end
+    end
+  end
   local function resourcePath(path) return path:gsub('^/', '') end
   local function request(kind, url, callback)
-    requests[#requests + 1] = { kind = kind, url = url, callback = callback }
+    requests[#requests + 1] = { kind = kind, url = url, callback = function(...)
+      local data, err = ...
+      if kind == 'manifest' and type(data) == 'table' then
+        callback(json.decode(json.encode(data)), err)
+      else
+        callback(...)
+      end
+      drainStorageSyncs()
+    end }
     return #requests
   end
-  local env = {
+  env = {
     io = { open = function(path, mode)
       local key = resourcePath(path)
       local data = files[key]
@@ -64,6 +79,7 @@ local function fixture(browser)
       return window
     end,
     connect = function(target, callbacks) target.callbacks = callbacks end,
+    disconnect = function(target) target.callbacks = nil end,
     scheduleEvent = function(fn, delay) events[#events + 1] = {fn = fn, delay = delay} return #events end,
     removeEvent = function(id) if events[id] then events[id].removed = true end end,
     HTTP = { timeout = 30, cancel = function() end,
@@ -76,10 +92,22 @@ local function fixture(browser)
       fileExists = function(path) return files[resourcePath(path)] ~= nil end,
       readFileContents = function(path) return assert(files[resourcePath(path)], path) end,
       writeFileContents = function(path, data) files[resourcePath(path)] = data return true end,
+      deleteFile = function(path) files[resourcePath(path)] = nil return true end,
       fileSha256 = function(path) return files[resourcePath(path)] and hash(files[resourcePath(path)]) or '' end,
     }
   }
   local resources = env.g_resources
+  local syncId = 0
+  resources.requestWritableStorageSync = function()
+    syncId = syncId + 1
+    local id = syncId
+    env.scheduleEvent(function()
+      if resources.callbacks and resources.callbacks.onWritableStorageSync then
+        resources.callbacks.onWritableStorageSync(id, env.storageError or '')
+      end
+    end, 0)
+    return id
+  end
   resources.fileExistsInWorkDir = resources.fileExists
   resources.readFileContentsFromWorkDir = resources.readFileContents
   resources.writeFileContentsToWorkDir = resources.writeFileContents
@@ -107,7 +135,11 @@ local function fixture(browser)
     files['downloads/archive.zip'] = 'archive'
     requests[#requests].callback('archive.zip', nil, nil)
     for _, event in ipairs(events) do
-      if event.delay == 50 and not event.removed then event.removed = true event.fn() end
+      if event.delay == 50 and not event.removed then
+        event.removed = true
+        event.fn()
+        drainStorageSyncs()
+      end
     end
   end
   return env, files, requests, results, ensure, install, function() window.callbacks.onCancel() end, events
@@ -176,12 +208,12 @@ for _, browser in ipairs({ false, true }) do
   assert(results[10][1])
   manifest.revision = '2001'
   ensure()
-  install()
-  assert(results[11][1], 'New revision did not install')
+  requests[#requests].callback(manifest)
+  assert(results[11][1] and results[11][3], 'New revision with identical files was not adopted')
   manifest.revision = '2000'
   -- A rollback is explicit pointer promotion too; equality, not numeric ordering.
   ensure()
-  install()
+  requests[#requests].callback(manifest)
   assert(results[12][1])
   ensure()
   local afterUnload = requests[#requests].callback
@@ -200,5 +232,56 @@ for _, browser in ipairs({ false, true }) do
     assert(reloads == 1 and #requests == before and #results == 12,
         'A browser update tried to extract alongside the cached SPR or resumed stale login')
   end
+end
+
+-- A reopened browser may retain the old pending journal despite having a fully
+-- valid pair. Repair and persist the metadata without a single ZIP request.
+do
+  local env, files, requests, results, ensure = fixture(true)
+  for name, contents in pairs(pair) do files[base .. name] = contents end
+  files[base .. '.asset-update/pending.json'] = '{"previous":[]}'
+  ensure()
+  requests[1].callback(manifest)
+  assert(#requests == 1 and results[1][1])
+  assert(files[base .. '.asset-update/pending.json'] == nil)
+  assert(json.decode(files[base .. '.asset-revision.json']).revision == manifest.revision)
+  files[base .. '.asset-update/backup/Tibia.spr'] = 'orphaned backup'
+  ensure()
+  requests[#requests].callback(manifest)
+  assert(#requests == 2 and results[2][1] and results[2][3] == false)
+  assert(files[base .. '.asset-update/backup/Tibia.spr'] == nil,
+      'A verified cache hit retained an orphaned backup')
+end
+
+do
+  local env, files, requests, results, ensure, _, cancel, events = fixture(true)
+  env.storageError = 'QuotaExceededError'
+  ensure()
+  requests[1].callback(manifest)
+  assert(#requests == 1 and not results[1][1] and next(files) == nil,
+      'Unavailable storage allowed download or installation')
+  env.storageError = nil
+  env.pauseStorageSyncs = true
+  ensure()
+  requests[#requests].callback(manifest)
+  assert(#results == 1, 'A pending durability acknowledgment reported completion')
+  cancel()
+  assert(#results == 2 and not results[2][1])
+  env.pauseStorageSyncs = false
+  for name, contents in pairs(pair) do files[base .. name] = contents end
+  ensure()
+  requests[#requests].callback(manifest)
+  assert(#results == 3 and results[3][1], 'A stale sync result resumed the canceled operation')
+  env.pauseStorageSyncs = true
+  ensure()
+  requests[#requests].callback(manifest)
+  for _, event in ipairs(events) do
+    if event.delay == 120000 and not event.removed then
+      event.removed = true
+      event.fn()
+      break
+    end
+  end
+  assert(#results == 4 and not results[4][1] and results[4][2]:find('timed out', 1, true))
 end
 print('Desktop/browser asset revision login flow tests passed')

@@ -266,6 +266,10 @@
       let persistentStorageLoadFailed = false;
 
       function requestPersistentStorageSync(callback) {
+        if (!persistentStorageReady) {
+          if (callback) callback(new Error("Browser storage is unavailable or has not finished loading. Reload and retry."));
+          return;
+        }
         if (callback) persistentStorageSyncWaiters.push(callback);
         persistentStorageSyncPending = true;
 
@@ -402,6 +406,13 @@
           function () {
             addRunDependency("syncfs");
             if (!FS.analyzePath("/user").exists) FS.mkdir("/user");
+            const queuePersist = IDBFS.queuePersist;
+            IDBFS.queuePersist = function (mount) {
+              // Hydration itself creates nodes. Do not write a partial/failed
+              // load back over the saved profile through autoPersist.
+              if (mount.mountpoint === "/user" && !persistentStorageReady) return;
+              queuePersist(mount);
+            };
             FS.mount(IDBFS, { autoPersist: true }, "/user");
             FS.syncfs(true, function (err) {
               if (err) {

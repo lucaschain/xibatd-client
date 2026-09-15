@@ -42,6 +42,7 @@ jobs:
           luajit tests/client_asset_revision_flow_test.lua "$PWD"
           luajit tests/client_asset_flags_test.lua "$PWD"
           luajit tests/client_asset_world_login_test.lua "$PWD"
+          node tests/browser_storage_sync_test.cjs
           luajit tests/xibat_protocol_lifecycle_test.lua "$PWD"
           luajit tests/xibat_turret_inspector_test.lua "$PWD"
           luajit tests/xibat_turret_rune_item_test.lua "$PWD"

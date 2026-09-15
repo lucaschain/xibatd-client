@@ -24,7 +24,7 @@ local function check(round)
       assert(changed == false)
       if TEST_RELOAD then
         -- Simulate a newly required installation with the old SPR still cached.
-        assert(g_resources.writeFileContents('/data/things/1098/.asset-revision.json', ''))
+        assert(g_resources.writeFileContents('/data/things/1098/Tibia.dat', 'synthetic corruption'))
         modules.client_assets.ensureClientVersion(1098, function()
           error('A stale login resumed instead of reloading for installation')
         end)

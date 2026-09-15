@@ -26,7 +26,8 @@ function AssetRevision.validate(manifest, version)
 end
 
 -- io reads/writes the same physical install target on desktop and browser.
--- All callbacks here are synchronous: no cancellation can interrupt activation.
+-- File mutations are synchronous; the owner fences asynchronous sync callbacks
+-- between phases so cancellation cannot resume a later installation attempt.
 function AssetRevision.new(io, version)
   local base = string.format('data/things/%d/', version)
   local stage = base .. '.asset-update/stage/'
@@ -37,6 +38,21 @@ function AssetRevision.new(io, version)
 
   local function write(path, data)
     assert(io.write(path, data), 'Unable to write asset file: ' .. path)
+  end
+
+  local function clear(path)
+    if io.remove then
+      if io.exists(path) then assert(io.remove(path), 'Unable to remove asset file: ' .. path) end
+    else
+      write(path, '')
+    end
+  end
+
+  local function cleanup()
+    for _, name in ipairs(names) do
+      clear(stage .. name)
+      clear(backup .. name)
+    end
   end
 
   local function copy(source, destination)
@@ -50,23 +66,85 @@ function AssetRevision.new(io, version)
   local function matches(directory, manifest)
     for _, name in ipairs(names) do
       local metadata = manifest.files[name]
-      if io.size(directory .. name) ~= metadata.size or io.hash(directory .. name) ~= metadata.sha256 then
-        return false
-      end
+      if not io.exists(directory .. name) then return false, 'missing-file: ' .. name end
+      if io.size(directory .. name) ~= metadata.size then return false, 'size-mismatch: ' .. name end
+      if io.hash(directory .. name) ~= metadata.sha256 then return false, 'hash-mismatch: ' .. name end
     end
     return true
   end
 
   function self.current(manifest)
-    local ok, result = pcall(function()
+    local ok, result, reason = pcall(function()
       -- A pending transaction, including a malformed/torn journal, blocks loading.
-      if io.exists(journal) and io.read(journal) ~= '' then return false end
-      if not io.exists(marker) then return false end
+      if io.exists(journal) and io.read(journal) ~= '' then return false, 'pending-journal' end
+      if not io.exists(marker) then return false, 'missing-revision-marker' end
       local installed = io.decode(io.read(marker))
-      return AssetRevision.validate(installed, version) and installed.revision == manifest.revision and
-          installed.archiveSha256 == manifest.archiveSha256 and matches(base, manifest)
+      if not AssetRevision.validate(installed, version) then return false, 'invalid-revision-marker' end
+      if installed.revision ~= manifest.revision then return false, 'revision-mismatch' end
+      if installed.archiveSha256 ~= manifest.archiveSha256 then return false, 'archive-mismatch' end
+      return matches(base, manifest)
     end)
-    return ok and result == true
+    if not ok then return false, 'metadata-read-error: ' .. tostring(result) end
+    return result == true, reason
+  end
+
+  function self.filesMatch(manifest)
+    assert(AssetRevision.validate(manifest, version))
+    local ok, result, reason = pcall(matches, base, manifest)
+    if not ok then return false, 'file-read-error: ' .. tostring(result) end
+    return result, reason
+  end
+
+  function self.flush(callback)
+    if io.sync then return io.sync(callback) end
+    callback(true)
+  end
+
+  -- Each phase completes its durable sync before the next mutates anything.
+  -- On sync failure retain recovery state; a retry can finish a hash-verified
+  -- candidate without downloading or rolling it back unnecessarily.
+  local function runPhases(phases, callback, operationFailed)
+    callback = callback or function(ok, message) if not ok then error(message, 0) end end
+    local function advance(index)
+      if not phases[index] then return callback(true) end
+      local ok, message = pcall(phases[index])
+      if not ok then
+        if operationFailed then return operationFailed(message, callback) end
+        return callback(false, tostring(message))
+      end
+      self.flush(function(synced, syncError)
+        if not synced then return callback(false, 'Unable to persist game assets: ' .. tostring(syncError)) end
+        advance(index + 1)
+      end)
+    end
+    advance(1)
+  end
+
+  function self.confirm(manifest, callback)
+    assert(AssetRevision.validate(manifest, version))
+    runPhases({
+      function() assert(self.filesMatch(manifest), 'Cannot confirm mismatched DAT/SPR files.') end,
+      function()
+        write(marker, io.encode(manifest))
+        -- Truncating a journal to zero bytes does not trigger IDBFS autoPersist.
+        -- Removal does, and cannot be missed due to equal modification times.
+        clear(journal)
+      end,
+      cleanup,
+    }, callback)
+  end
+
+  function self.finishCached(callback)
+    -- A previous attempt may have committed its marker but failed to persist
+    -- temporary-file removal. Retry cleanup on cache hits too, without touching
+    -- the verified live pair or requiring desktop workdir write permissions.
+    runPhases({function()
+      if io.remove then
+        assert(not io.exists(journal) or io.read(journal) == '', 'Cannot clean a pending asset transaction.')
+        clear(journal)
+        cleanup()
+      end
+    end}, callback)
   end
 
   function self.recover()
@@ -93,45 +171,47 @@ function AssetRevision.new(io, version)
             'Unable to verify restored asset: ' .. name)
       end
     end
-    write(marker, '') -- A recovered pair must be revalidated against the remote requirement.
-    write(journal, '')
+    clear(marker) -- A recovered pair must be revalidated against the remote requirement.
+    clear(journal)
   end
 
-  function self.install(manifest, extract)
+  function self.install(manifest, extract, callback)
     assert(AssetRevision.validate(manifest, version))
-    self.recover()
-    -- Clear previous staging contents so missing archive entries cannot be
-    -- accidentally satisfied by an earlier extraction.
-    for _, name in ipairs(names) do write(stage .. name, '') end
-    assert(extract(stage), 'Unable to extract asset archive into staging.')
-    assert(matches(stage, manifest), 'Staged DAT/SPR size or SHA-256 mismatch.')
-    local pending = { previous = {} }
-    for _, name in ipairs(names) do
-      if io.exists(base .. name) then
-        copy(base .. name, backup .. name)
-        pending.previous[name] = { size = io.size(base .. name), sha256 = io.hash(base .. name) }
-        assert(io.hash(backup .. name) == pending.previous[name].sha256, 'Unable to verify asset backup.')
-      end
-    end
-    -- Publish the journal before replacing either live file. On browser these
-    -- writes live under /user (IDBFS autoPersist); recovery tolerates partial saves.
-    write(journal, io.encode(pending))
-    local ok, err = pcall(function()
-      for _, name in ipairs(names) do copy(stage .. name, base .. name) end
-      assert(matches(base, manifest), 'Installed DAT/SPR size or SHA-256 mismatch.')
-      write(marker, io.encode(manifest))
-      write(journal, '')
-    end)
-    if not ok then
+    local liveMutated = false
+    runPhases({
+      function()
+        self.recover()
+        for _, name in ipairs(names) do clear(stage .. name) end
+        assert(extract(stage), 'Unable to extract asset archive into staging.')
+        assert(matches(stage, manifest), 'Staged DAT/SPR size or SHA-256 mismatch.')
+        local pending = { previous = {} }
+        for _, name in ipairs(names) do
+          if io.exists(base .. name) then
+            copy(base .. name, backup .. name)
+            pending.previous[name] = { size = io.size(base .. name), sha256 = io.hash(base .. name) }
+            assert(io.hash(backup .. name) == pending.previous[name].sha256, 'Unable to verify asset backup.')
+          end
+        end
+        write(journal, io.encode(pending))
+      end,
+      function()
+        liveMutated = true
+        for _, name in ipairs(names) do copy(stage .. name, base .. name) end
+        assert(matches(base, manifest), 'Installed DAT/SPR size or SHA-256 mismatch.')
+      end,
+      function()
+        write(marker, io.encode(manifest))
+        clear(journal)
+      end,
+      cleanup,
+    }, callback, function(err, done)
+      if not liveMutated then return done(false, tostring(err)) end
       local recovered, recoveryError = pcall(self.recover)
-      error(tostring(err) .. (recovered and '' or '\nRecovery pending: ' .. tostring(recoveryError)))
-    end
-    -- Retain only the active pair after successful activation. Interrupted cleanup
-    -- is harmless: no runtime loader uses these temporary paths.
-    for _, name in ipairs(names) do
-      io.write(stage .. name, '')
-      io.write(backup .. name, '')
-    end
+      if not recovered then return done(false, tostring(err) .. '\nRecovery pending: ' .. tostring(recoveryError)) end
+      self.flush(function(ok, syncError)
+        done(false, tostring(err) .. (ok and '' or '\nRecovery persistence failed: ' .. tostring(syncError)))
+      end)
+    end)
   end
 
   return self

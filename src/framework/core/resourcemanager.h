@@ -90,6 +90,7 @@ public:
     std::string fileSha256(const std::string& path);
     std::string fileSha256InWorkDir(const std::string& path);
     int64_t fileSizeInWorkDir(const std::string& path);
+    uint32_t requestWritableStorageSync();
     bool writeDownloadedFile(const std::string& path, std::string destinationPath, bool decompressLzma);
     bool writeDownloadedFileToWorkDir(const std::string& path, std::string destinationPath, bool decompressLzma);
     bool extractDownloadedArchive(const std::string& path, std::string destinationPath, const std::string& entryPrefix, bool stripPrefix);
@@ -110,6 +111,7 @@ protected:
     std::vector<std::string> discoverPath(const std::filesystem::path& path, bool filenameOnly, bool recursive);
 
 private:
+    uint32_t m_storageSyncId{ 0 };
     std::string m_workDir;
     std::string m_writeDir;
     std::string m_userDirOverride;

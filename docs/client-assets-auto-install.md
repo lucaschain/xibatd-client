@@ -15,8 +15,9 @@ version checks select newer wire formats and protobuf assets.
 Before account login **and** world login/reconnect, the client fetches the current
 manifest with a cache-busting query. The publisher also sets `Cache-Control: no-store`.
 Installed files never bypass this check. A failed check blocks login; retry the login
-to retry the check. Downloads begin automatically when the revision, archive identity,
-file size, or DAT/SPR SHA-256 differs. Cancellation and old asynchronous callbacks
+to retry the check. Cached files are checked against the required DAT/SPR sizes and
+SHA-256 hashes; mismatches download automatically. A missing/invalid marker or stale
+journal is repaired without downloading if the actual pair matches. Cancellation and old asynchronous callbacks
 cannot resume a later login/download operation. Matching revisions do not redownload.
 
 The schema-1 manifest contains `compatibilityVersion`, `revision`, `archiveUrl`,
@@ -31,15 +32,34 @@ The archive extracts below `data/things/1098/.asset-update/stage/`, is verified,
 and the previous pair is backed up before a pending journal is written. Live files
 are replaced synchronously, verified, and recorded in `.asset-revision.json`.
 No runtime load/login proceeds with a pending transaction. Failed writes restore
-verified backups; interrupted recovery is retried on the next check. Invalid recovery
-metadata fails closed for inspection. Successful installs empty the temporary copies.
+verified backups; interrupted recovery is retried on the next check. A complete pair
+matching the current manifest can finish an interrupted commit without rollback or
+download. Invalid recovery metadata with mismatched files fails closed for inspection.
+Successful browser installs delete their journal and temporary copies, rather than
+truncating them: IDBFS autoPersist does not reliably track zero-byte truncations.
+Verified cache hits also finish removal of orphaned staging/backups left by an
+interrupted cleanup save, without redownloading or replacing the active pair.
 This is a journaled two-file replacement, not a filesystem-wide atomic rename.
 
 Desktop I/O consistently targets the workdir. Browser I/O targets the writable
-`/user` tree backed by the existing IDBFS `autoPersist` mount. On a new browser session,
-the same revision/hash checks detect missing, incomplete, or corrupted persisted data.
-Browser persistence still depends on storage availability/quota; this Lua path does
-not provide an explicit synchronous IndexedDB flush acknowledgment.
+`/user/.otclient` tree backed by the IDBFS `autoPersist` mount. Browser installation
+waits for explicit IndexedDB acknowledgments at four boundaries: staged pair/backups
+and journal; replaced live files; revision marker and journal removal; temporary-file
+cleanup. Success is reported only after all four saves complete. Cache checks first
+verify storage readiness, and a missing-marker repair saves the verified files before
+committing metadata. Hydration cannot auto-persist partial results over the saved profile.
+
+`g_resources.requestWritableStorageSync()` bridges the Lua request to the shell's
+serialized `requestPersistentStorageSync`. Its native completion delivers only an ID
+and owned error string on the Lua dispatcher through `onWritableStorageSync`.
+Canceled, timed-out, or unloaded requests disconnect their handlers; late callbacks
+cannot advance a new installation. Quota, initialization, and sync failures block
+login with a useful error rather than falsely claiming a saved installation.
+The storage acknowledgment timeout defaults to 120 seconds and can be configured
+with `Services.clientAssets.storageSyncTimeout` (milliseconds).
+
+Cache diagnostics distinguish pending journals, missing/invalid revision markers,
+revision/archive mismatches, missing files, size mismatches, and hash mismatches.
 
 The runtime's resolved DAT/SPR hashes are checked too. A stale user-directory copy
 shadowing a desktop installation blocks login with an explanatory error instead of
@@ -67,6 +87,7 @@ luajit tests/client_asset_revision_test.lua .
 luajit tests/client_asset_revision_flow_test.lua .
 luajit tests/client_asset_flags_test.lua .
 luajit tests/client_asset_world_login_test.lua .
+node tests/browser_storage_sync_test.cjs
 ```
 
 `tests/client_asset_smoke.lua` can be run from `otclientrc.lua` in an isolated Windows
@@ -81,6 +102,28 @@ It loads the published WASM bundle in a fresh context and injects the current so
 Lua locally before startup. It exercises a real asset download, checks with the SPR
 already cached, and automatic browser reload/reinstallation. It never logs into an
 account or modifies production; its synthetic IDBFS contents disappear with the context.
+The memory test requires a WASM bundle containing the native storage sync bridge.
+
+`tests/browser_asset_persistence_test.cjs` uses a disposable **persistent** Chromium
+profile and checks IndexedDB immediately after success. It requires exactly one ZIP
+download for the first install and zero for page refresh, tab reopen, full browser
+process restart, stale-journal repair, and missing-marker repair. A corrupted DAT
+requires one repair download. It never uses a game account.
+
+```sh
+# With Playwright installed and available on NODE_PATH:
+node tests/browser_asset_persistence_test.cjs https://play.xibatd.online/
+
+# Before publication: inject current Lua/shell into a published test bundle.
+node tests/browser_asset_persistence_test.cjs --source --transport-shim
+```
+
+`--transport-shim` is explicit test-only support for an older WASM that lacks the
+new native signal. It replaces just the ID/error transport with transient files
+outside `/user`; the source shell, actual `FS.syncfs`, IndexedDB, and asset I/O all
+execute normally. The native EM_ASM transport is separately executed by the Node
+unit test; `tests/client_storage_sync_smoke.lua` verifies the compiled native
+resource binding and dispatcher callbacks in an isolated Windows profile.
 
 ### Upstream modern asset installation
 

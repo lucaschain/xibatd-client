@@ -26,6 +26,7 @@
 
 #include "filestream.h"
 #include "graphicalapplication.h"
+#include "eventdispatcher.h"
 #include "framework/graphics/drawpoolmanager.h"
 #include "framework/net/protocolhttp.h"
 #include "framework/platform/platform.h"
@@ -38,6 +39,9 @@
 #endif
 
 #include <lzma.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #ifdef FRAMEWORK_HAVE_LIBARCHIVE
 #include <archive.h>
 #include <archive_entry.h>
@@ -924,6 +928,41 @@ int64_t ResourceManager::fileSizeInWorkDir(const std::string& path)
     std::error_code error;
     const auto size = std::filesystem::file_size(std::filesystem::path(m_workDir) / normalizeVirtualPath(path), error);
     return error ? -1 : static_cast<int64_t>(size);
+}
+
+#ifdef __EMSCRIPTEN__
+// IndexedDB completes on the browser thread. Deliver only the request ID and an
+// owned error string on the Lua dispatcher; no Lua callback/userdata crosses threads.
+extern "C" EMSCRIPTEN_KEEPALIVE void xibaWritableStorageSyncDone(uint32_t requestId, const char* error)
+{
+    g_dispatcher.addEvent([requestId, message = std::string(error ? error : "")] {
+        g_lua.callGlobalField("g_resources", "onWritableStorageSync", requestId, message);
+    });
+}
+#endif
+
+uint32_t ResourceManager::requestWritableStorageSync()
+{
+    const auto requestId = ++m_storageSyncId;
+#ifdef __EMSCRIPTEN__
+    MAIN_THREAD_ASYNC_EM_ASM({
+        const requestId = $0;
+        const done = (error) => {
+            const message = error ? String(error.message || error) : '';
+            Module['ccall']('xibaWritableStorageSyncDone', null, ['number', 'string'], [requestId, message]);
+        };
+        if (!Module.requestPersistentStorageSync) {
+            done('Browser storage synchronization is unavailable.');
+            return;
+        }
+        Module.requestPersistentStorageSync(done);
+    }, requestId);
+#else
+    g_dispatcher.addEvent([requestId] {
+        g_lua.callGlobalField("g_resources", "onWritableStorageSync", requestId, std::string());
+    });
+#endif
+    return requestId;
 }
 
 bool ResourceManager::writeDownloadedFile(const std::string& path, std::string destinationPath, const bool decompressLzma)

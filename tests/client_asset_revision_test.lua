@@ -107,4 +107,96 @@ for _, field in ipairs({ 'revision', 'archiveSha256', 'compatibilityVersion', 'f
 end
 assert(not AssetRevision.validate(manifest, 2000), 'Asset revision treated as compatibility version')
 
+-- Browser durability fixture: mutations are visible in memory immediately, but
+-- survive a restart only after a successful asynchronous storage acknowledgment.
+local function durableFixture()
+  local memory, backend, owner, extractPair = fixture()
+  local disk, syncs = {}, {}
+  for path, contents in pairs(memory) do disk[path] = contents end
+  backend.remove = function(path) memory[path] = nil return true end
+  backend.sync = function(callback) syncs[#syncs + 1] = callback end
+  local function sync(ok)
+    local callback = assert(table.remove(syncs, 1), 'No pending storage sync')
+    if ok then
+      for path in pairs(disk) do disk[path] = nil end
+      for path, contents in pairs(memory) do disk[path] = contents end
+    end
+    callback(ok, not ok and 'QuotaExceededError' or nil)
+  end
+  return memory, backend, owner, extractPair, disk, sync, syncs
+end
+
+local memory, backend, owner, extractPair, disk, sync, syncs = durableFixture()
+local complete
+owner.install(manifest, extractPair, function(ok, err) complete = {ok, err} end)
+assert(not complete and memory[base .. 'Tibia.dat'] == 'old dat')
+sync(true) -- staged pair, backup and pending journal become durable before replacement
+assert(not complete and disk[base .. 'Tibia.dat'] == 'old dat' and disk[journal])
+assert(memory[base .. 'Tibia.dat'] == pair['Tibia.dat'])
+sync(true) -- live DAT/SPR become durable before the completion marker
+assert(not complete and disk[base .. 'Tibia.dat'] == pair['Tibia.dat'] and disk[journal])
+assert(memory[journal] == nil and memory[marker])
+sync(true) -- marker and journal deletion are durable before removing backups
+assert(not complete and disk[journal] == nil and disk[marker])
+sync(true) -- cleanup is acknowledged before reporting success
+assert(complete[1] and #syncs == 0 and disk[journal] == nil)
+assert(disk[owner.stage .. 'Tibia.spr'] == nil, 'Temporary SPR remained in persistent storage')
+
+-- Reproduce the deployed bug: saved DAT/SPR and marker are correct but an old
+-- nonempty journal survived a zero-byte truncation. Roll forward without extraction.
+memory[journal] = '{"previous":[]}'
+local cached, reason = owner.current(manifest)
+assert(not cached and reason == 'pending-journal')
+assert(owner.filesMatch(manifest))
+complete = nil
+owner.confirm(manifest, function(ok, err) complete = {ok, err} end)
+assert(not complete)
+sync(true)
+sync(true)
+sync(true)
+assert(complete[1] and disk[journal] == nil and owner.current(manifest))
+
+-- A missing/invalid marker is repairable using hashes; corrupt bytes are not.
+memory[marker] = nil
+assert(owner.filesMatch(manifest))
+local _, missingReason = owner.current(manifest)
+assert(missingReason == 'missing-revision-marker')
+owner.confirm(manifest, function(ok) assert(ok) end)
+sync(true) sync(true) sync(true)
+memory[base .. 'Tibia.spr'] = 'corrupt'
+assert(not owner.filesMatch(manifest))
+complete = nil
+owner.confirm(manifest, function(ok, err) complete = {ok, err} end)
+assert(not complete[1] and #syncs == 0)
+
+-- Failure at any durable checkpoint cannot claim installation success.
+for failedPhase = 1, 4 do
+  memory, backend, owner, extractPair, disk, sync, syncs = durableFixture()
+  complete = nil
+  owner.install(manifest, extractPair, function(ok, err) complete = {ok, err} end)
+  for phase = 1, failedPhase - 1 do sync(true) end
+  sync(false)
+  assert(complete and not complete[1] and complete[2]:find('QuotaExceededError', 1, true))
+  assert(#syncs == 0, 'Failed storage sync advanced the installation')
+  if failedPhase == 1 then
+    assert(memory[base .. 'Tibia.dat'] == 'old dat' and not disk[marker])
+  elseif failedPhase == 2 then
+    assert(disk[journal] and not disk[marker])
+  elseif failedPhase == 3 then
+    assert(disk[journal] and disk[base .. 'Tibia.dat'] == pair['Tibia.dat'])
+  elseif failedPhase == 4 then
+    -- Reopen the persisted state after cleanup failed. The marker is current,
+    -- but disk still contains staging/backups; a cache hit must finish removal.
+    for path in pairs(memory) do memory[path] = nil end
+    for path, contents in pairs(disk) do memory[path] = contents end
+    assert(owner.current(manifest) and memory[owner.stage .. 'Tibia.spr'])
+    complete = nil
+    owner.finishCached(function(ok, err) complete = {ok, err} end)
+    assert(not complete)
+    sync(true)
+    assert(complete[1] and disk[owner.stage .. 'Tibia.spr'] == nil)
+    assert(disk[base .. '.asset-update/backup/Tibia.spr'] == nil)
+  end
+end
+
 print('Asset revision integrity and recovery tests passed')

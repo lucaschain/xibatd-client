@@ -243,9 +243,9 @@ local function userFacingError(message)
   return message
 end
 
-local function createDownloadWindow()
+local function createDownloadWindow(title)
   local initialText = tr('Preparing download...') .. '\n0%'
-  local window = displayCancelBox(tr('Downloading Assets'), initialText)
+  local window = displayCancelBox(title or tr('Downloading Assets'), initialText)
   local width = DOWNLOAD_WINDOW_WIDTH
   if rootWidget then
     width = math.min(width, math.max(280, rootWidget:getWidth() - 40))
@@ -736,8 +736,22 @@ local function logArchiveHeartbeat(message)
   logInfo(message)
 end
 
+local function clearStorageSync(request)
+  if not request then return end
+  if request.storageSyncHandler then
+    disconnect(g_resources, { onWritableStorageSync = request.storageSyncHandler })
+    request.storageSyncHandler = nil
+  end
+  if request.storageSyncTimeout then
+    removeEvent(request.storageSyncTimeout)
+    request.storageSyncTimeout = nil
+  end
+  request.storageSyncId = nil
+end
+
 local function finishDownload(ok, message, reloadRequired)
   local callback = activeDownload and activeDownload.callback
+  clearStorageSync(activeDownload)
   if ok then
     logInfo(message or 'Asset download finished.')
   elseif message then
@@ -1488,7 +1502,7 @@ function terminate()
   end
 end
 
-local function revisionStore(config, version)
+local function revisionStore(config, version, synchronize)
   local workDir = shouldInstallInWorkDir(config)
   local function read(path)
     if workDir then return g_resources.readFileContentsFromWorkDir(path) end
@@ -1519,6 +1533,8 @@ local function revisionStore(config, version)
     read = read,
     write = function(path, contents) return writeInstallFile(config, path, contents) end,
     copy = not workDir and copyBrowserFile or nil,
+    remove = not workDir and function(path) return g_resources.deleteFile('/' .. path) end or nil,
+    sync = not workDir and synchronize or nil,
     hash = function(path)
       if workDir then return g_resources.fileSha256InWorkDir(path) end
       return g_resources.fileSha256('/' .. path)
@@ -1547,7 +1563,7 @@ local function ensureAssetRevision(config, version, callback)
   revisionRequest = revisionRequest + 1
   local request = { version = version, callback = callback, canceled = false }
   activeDownload = request
-  request.window = createDownloadWindow()
+  request.window = createDownloadWindow(tr('Game assets'))
   connect(request.window, { onCancel = cancelDownload })
   setDownloadBusy('Checking game assets')
 
@@ -1561,7 +1577,26 @@ local function ensureAssetRevision(config, version, callback)
       if not ok and alive() then finishDownload(false, tostring(err)) end
     end
   end
-  local store = revisionStore(config, version)
+  local function synchronize(callback)
+    if not alive() then return end
+    if shouldInstallInWorkDir(config) then return callback(true) end
+    if not g_resources.requestWritableStorageSync then
+      return callback(false, 'This client lacks browser storage synchronization. Update the client and retry.')
+    end
+    request.storageSyncHandler = function(id, message)
+      if not alive() or id ~= request.storageSyncId then return end
+      clearStorageSync(request)
+      callback(message == nil or message == '', message)
+    end
+    connect(g_resources, { onWritableStorageSync = request.storageSyncHandler })
+    request.storageSyncId = g_resources.requestWritableStorageSync()
+    request.storageSyncTimeout = scheduleEvent(function()
+      if not alive() then return end
+      clearStorageSync(request)
+      callback(false, 'Browser storage save timed out. Check available storage and retry.')
+    end, config.storageSyncTimeout or 120000)
+  end
+  local store = revisionStore(config, version, synchronize)
   local function accept(manifest, installed)
     -- The writable user directory can shadow a desktop workdir installation.
     -- Never approve a pair different from what the actual runtime will read.
@@ -1573,19 +1608,29 @@ local function ensureAssetRevision(config, version, callback)
     verifiedRevisions[version] = manifest
     local changed = installed == true or not previousRevision or
         previousRevision.revision ~= manifest.revision or previousRevision.archiveSha256 ~= manifest.archiveSha256
-    finishDownload(true, nil, changed)
+    finishDownload(true, 'Game assets ready (revision ' .. manifest.revision .. ').', changed)
   end
-  local separator = config.revisionManifestUrl:find('?', 1, true) and '&' or '?'
-  local url = config.revisionManifestUrl .. separator .. 'check=' .. os.time() .. '-' .. revisionRequest
-  request.operationId = httpGetJSON(config, url, guarded(function(manifest, err)
-    request.operationId = nil
-    if err then return finishDownload(false, 'Unable to check game assets. Retry login.\n' .. tostring(err)) end
-    local valid, validationError = AssetRevision.validate(manifest, version)
-    if not valid then return finishDownload(false, validationError) end
-    store.recover()
-    if store.current(manifest) then
-      return accept(manifest)
+  local function applyManifest(manifest)
+    local current, cacheReason = store.current(manifest)
+    if current then
+      logInfo('Using verified cached asset revision ' .. manifest.revision .. '.')
+      return store.finishCached(guarded(function(ok, err)
+        if not ok then return finishDownload(false, err) end
+        accept(manifest)
+      end))
     end
+    logInfo('Asset cache requires validation: ' .. tostring(cacheReason))
+    local matching, fileReason = store.filesMatch(manifest)
+    if matching then
+      logInfo('DAT/SPR hashes match; repairing installation metadata without downloading.')
+      setDownloadBusy('Saving game asset metadata')
+      return store.confirm(manifest, guarded(function(ok, err)
+        if not ok then return finishDownload(false, err) end
+        accept(manifest)
+      end))
+    end
+    logInfo('Asset files require an update: ' .. tostring(fileReason))
+    store.recover()
     if g_platform.isBrowser() and g_sprites.isLoaded() then
       -- A live revision change must install on a fresh browser heap: archive
       -- extraction plus the cached old SPR can exceed the fixed WASM budget.
@@ -1605,15 +1650,30 @@ local function ensureAssetRevision(config, version, callback)
           local ok, hashError = verifyDownloadedSha256(path, manifest.archiveSha256)
           if not ok then return finishDownload(false, hashError) end
           scheduleEvent(guarded(function()
+            setDownloadBusy('Installing and saving game assets')
             store.install(manifest, function(stage)
               return extractDownloadedArchive(config, path, stage, 'assets', true)
-            end)
-            assert(store.current(manifest), 'Asset revision could not be verified after installation.')
-            accept(manifest, true)
+            end, guarded(function(ok, err)
+              if not ok then return finishDownload(false, err) end
+              assert(store.current(manifest), 'Asset revision could not be verified after installation.')
+              accept(manifest, true)
+            end))
           end), 50)
         end), guarded(function(progress)
           if progress then setDownloadProgress('Downloading game assets', progress) end
         end))
+  end
+  local separator = config.revisionManifestUrl:find('?', 1, true) and '&' or '?'
+  local url = config.revisionManifestUrl .. separator .. 'check=' .. os.time() .. '-' .. revisionRequest
+  request.operationId = httpGetJSON(config, url, guarded(function(manifest, err)
+    request.operationId = nil
+    if err then return finishDownload(false, 'Unable to check game assets. Retry login.\n' .. tostring(err)) end
+    local valid, validationError = AssetRevision.validate(manifest, version)
+    if not valid then return finishDownload(false, validationError) end
+    synchronize(guarded(function(storageReady, storageError)
+      if not storageReady then return finishDownload(false, 'Browser storage is not ready: ' .. tostring(storageError)) end
+      applyManifest(manifest)
+    end))
   end))
 end
 
