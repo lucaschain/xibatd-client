@@ -31,7 +31,7 @@ EnterGameWindow
 
   Label
     id: emailLabel
-    !text: tr('Acc Name:') 
+    !text: tr('Username:')
     anchors.left: parent.left
     anchors.top: parent.top
 
@@ -75,7 +75,7 @@ EnterGameWindow
   UIWidget
     id: rememberEmailTip
     image-source: /images/icons/show_gui_help_grey
-    !specialtooltip: 'Be aware that your email address will be stored on your configuration file "config.otml" if you activate this option.'
+    !specialtooltip: 'Be aware that your username will be stored on your configuration file "config.otml" if you activate this option.'
     anchors.right: accountNameTextEdit.right
     anchors.verticalCenter: rememberEmailBox.verticalCenter
     visible: false
@@ -87,7 +87,7 @@ EnterGameWindow
       visible: false
 
   UIButton
-    !text: tr('Forgot password and/or email')
+    !text: tr('Forgot password and/or username')
     id: Forgot_password_email
     font: verdana-11px-monochrome-underline
     text-align: left
