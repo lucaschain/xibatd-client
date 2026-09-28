@@ -1,0 +1,46 @@
+MainWindow
+  id: replayWindow
+  text: Run replay
+  size: 440 200
+  @onEscape: self:hide()
+
+  Label
+    id: description
+    text: Xibat 1098 recording in records/ (client working directory).
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-wrap: true
+    height: 35
+
+  TextEdit
+    id: filename
+    text: hive-timeout.rec
+    anchors.top: description.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 8
+    @onEnter: modules.client_replay.openRecording()
+
+  Label
+    text: Player view, normal speed. Enemy telemetry is a separate file.
+    anchors.top: filename.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 8
+    text-wrap: true
+    height: 35
+
+  Button
+    text: Play
+    width: 80
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    @onClick: modules.client_replay.openRecording()
+
+  Button
+    text: Stop replay
+    width: 100
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    @onClick: modules.client_replay.stop()

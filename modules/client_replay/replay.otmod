@@ -1,0 +1,9 @@
+Module
+  name: client_replay
+  description: Open native balance-lab packet recordings
+  author: Xibat
+  sandboxed: true
+  scripts: [ replay ]
+  dependencies: [ client_topmenu, game_features, game_things ]
+  @onLoad: init()
+  @onUnload: terminate()
