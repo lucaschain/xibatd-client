@@ -1,0 +1,9 @@
+Button
+  id: xibatMutationStatus
+  anchors.top: parent.top
+  anchors.horizontalCenter: parent.horizontalCenter
+  margin-top: 170
+  size: 320 42
+  text-wrap: true
+  color: #f4d08a
+  visible: false

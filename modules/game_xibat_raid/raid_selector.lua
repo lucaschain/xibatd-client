@@ -102,6 +102,7 @@ function raidSelectorController:clearResetTimer()
 end
 
 function raidSelectorController:updateResetTimer()
+    self:updateMutationExpiry()
     if not self.resetDeadline or not self.ui then
         return false
     end
@@ -110,6 +111,7 @@ function raidSelectorController:updateResetTimer()
     self.ui.reset:setText(string.format('%02d:%02d:%02d', math.floor(secondsLeft / 3600),
         math.floor(secondsLeft / 60) % 60, secondsLeft % 60))
     if secondsLeft == 0 then
+        if self.mutationSession then return true end
         self.resetDeadline = nil
         self.resetEvent = nil
         return false
@@ -128,6 +130,8 @@ function raidSelectorController:startResetTimer(deadline)
 end
 
 function raidSelectorController:close()
+    self:closeMutations()
+    self.mutationSession = nil
     self:destroyPrompt()
     self:clearResetTimer()
     self.selectedRaid = nil
@@ -137,6 +141,7 @@ function raidSelectorController:close()
 end
 
 function raidSelectorController:selectRaid(raid, card)
+    self:closeMutations()
     self.selectedRaid = raid
     self.ui.emptyDetail:hide()
     self.ui.detail:show()
@@ -164,7 +169,7 @@ function raidSelectorController:selectRaid(raid, card)
     self.ui.detail.rewardsTitle:setVisible(#raid.items > 0)
     self.ui.detail.rewards:setVisible(#raid.items > 0)
     self.ui.detail.startButton:setEnabled(raid.available)
-    self.ui.detail.startButton:setText(raid.available and tr('Deploy to Raid') or tr('Raid Locked'))
+    self.ui.detail.startButton:setText(raid.available and (self.mutationSession and tr('Configure / Deploy') or tr('Deploy to Raid')) or tr('Raid Locked'))
     self.ui.detail.startButton.onClick = function()
         self:confirmStart()
     end
@@ -213,6 +218,7 @@ function raidSelectorController:confirmStart()
     if not raid or not raid.available then
         return
     end
+    if self.mutationSession then self:openMutations() return end
 
     self:destroyPrompt()
     local function cancel()
@@ -237,6 +243,8 @@ end
 
 function raidSelectorController:openSelector(body)
     self:destroyPrompt()
+    self:closeMutations()
+    self.mutationSession = body.mutations and body.mutations.session or nil
     self.ui.entries:setText(string.format('%d / %d', body.availableRaids, body.maxRaids))
     self:buildRaidList(body.raidList)
     self:startResetTimer(body.timerReset)
@@ -246,9 +254,16 @@ function raidSelectorController:openSelector(body)
 end
 
 function raidSelectorController:onRaidOpcode(_, _, payload)
+    if type(payload) == 'table' and payload.action ~= 'openRaidSelector' then
+        self:onMutationOpcode(payload.action, payload.body)
+        return
+    end
     if type(payload) ~= 'table' or payload.action ~= 'openRaidSelector' or not validateSelector(payload.body) then
         return
     end
+    if payload.body.mutations ~= nil and (type(payload.body.mutations) ~= 'table' or
+        payload.body.mutations.version ~= RaidMutationContract.version or
+        not RaidMutationContract.identity(payload.body.mutations.session)) then return end
     self:openSelector(payload.body)
 end
 
@@ -258,6 +273,7 @@ function raidSelectorController:updateScreenshotHeight(widget)
 end
 
 function raidSelectorController:onInit()
+    self:initMutations()
     self.ui:hide()
     self.raidList = self.ui:recursiveGetChildById('raidList')
     if not self.raidList then
@@ -278,8 +294,13 @@ end
 
 function raidSelectorController:onGameEnd()
     self:close()
+    self.activeMutationStatus = nil
+    self.mutationStatus:hide()
 end
 
 function raidSelectorController:onTerminate()
     self:close()
+    self.mutationWindow:destroy()
+    self.mutationStatus:destroy()
+    self.mutationWindow, self.mutationStatus, self.activeMutationStatus = nil, nil, nil
 end

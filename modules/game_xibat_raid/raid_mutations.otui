@@ -1,0 +1,111 @@
+XibatMutationChoice < Button
+  height: 64
+  font: verdana-11px-rounded
+  margin-bottom: 6
+  text-wrap: true
+  text-align: left
+
+XibatMutationLine < Label
+  height: 40
+  text-wrap: true
+  text-align: top-left
+  color: #c4ccd1
+  margin-bottom: 4
+
+MainWindow
+  id: xibatRaidMutations
+  size: 740 570
+  !text: tr('Raid mutations')
+  @onEscape: raidSelectorController:closeMutations()
+
+  Label
+    id: heading
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    color: #f4d08a
+
+  Label
+    id: notice
+    anchors.top: heading.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 48
+    text-wrap: true
+    color: #aebbc5
+
+  ScrollablePanel
+    id: choices
+    anchors.top: notice.bottom
+    anchors.left: parent.left
+    anchors.bottom: normalButton.top
+    width: 275
+    margin-bottom: 10
+    vertical-scrollbar: choicesScroll
+    layout:
+      type: verticalBox
+      fit-children: false
+
+  VerticalScrollBar
+    id: choicesScroll
+    anchors.top: choices.top
+    anchors.left: choices.right
+    anchors.bottom: choices.bottom
+    pixels-scroll: true
+    step: 40
+
+  ScrollablePanel
+    id: summary
+    anchors.top: choices.top
+    anchors.left: choicesScroll.right
+    anchors.right: summaryScroll.left
+    anchors.bottom: choices.bottom
+    margin-left: 15
+    margin-right: 5
+    vertical-scrollbar: summaryScroll
+    layout:
+      type: verticalBox
+      fit-children: false
+
+  VerticalScrollBar
+    id: summaryScroll
+    anchors.top: choices.top
+    anchors.right: parent.right
+    anchors.bottom: choices.bottom
+    pixels-scroll: true
+    step: 40
+
+  Button
+    id: normalButton
+    anchors.bottom: closeButton.top
+    anchors.left: parent.left
+    margin-bottom: 8
+    width: 140
+    height: 26
+    !text: tr('Clear mutations')
+
+  Button
+    id: refreshButton
+    anchors.bottom: normalButton.bottom
+    anchors.left: normalButton.right
+    margin-left: 8
+    width: 125
+    height: 26
+    !text: tr('Refresh list')
+
+  Button
+    id: deployButton
+    anchors.bottom: normalButton.bottom
+    anchors.left: summary.left
+    anchors.right: parent.right
+    height: 26
+    !text: tr('Review selection')
+
+  Button
+    id: closeButton
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    width: 120
+    height: 24
+    !text: tr('Close')

@@ -4,6 +4,6 @@ Module
   author: Xibat
   sandboxed: true
   dependencies: [ game_interface, game_xibat_core ]
-  scripts: [ raid_selector ]
+  scripts: [ raid_mutation_contract, raid_selector, raid_mutations ]
   @onLoad: raidSelectorController:init()
   @onUnload: raidSelectorController:terminate()
