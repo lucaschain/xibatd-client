@@ -78,10 +78,57 @@ function raidSelectorController:loadLocalMutationConfiguration()
 end
 
 function raidSelectorController:renderMutationSummary(summary)
-    self.mutationWindow.summary:destroyChildren()
-    for _, line in ipairs(C.lines(summary)) do
-        g_ui.createWidget('XibatMutationLine', self.mutationWindow.summary):setText(line)
+    local panel = self.mutationWindow.summary
+    panel:destroyChildren()
+    local function section(title)
+        g_ui.createWidget('XibatMutationSection', panel):setText(title)
     end
+    local function stat(caption, value, icon, color, style)
+        local row = g_ui.createWidget(style or 'XibatMutationStat', panel)
+        row.caption:setText(caption)
+        row.value:setText(value)
+        row.value:setColor(color or '#f0bf83')
+        if icon then row.icon:setImageSource('/images/icons/' .. icon) end
+        row:setTooltip(caption .. ': ' .. value)
+        return row
+    end
+    section('MUTATIONS  /  ' .. #summary.selected)
+    if #summary.selected == 0 then
+        stat('Normal raid', 'Standard', 'icon_shielding', '#9eafb9')
+    end
+    for _, selected in ipairs(summary.selected) do
+        stat(selected.name, 'Active', 'icon-impactanalyser-widget', '#86c8b2')
+    end
+    local effects = {
+        enemy_health_bps = {'Enemy health', 'icon_health'},
+        enemy_speed_bps = {'Enemy speed', 'icon-progressanalyser-widget'},
+        spawn_count_bps = {'Enemy count', 'icon_players'},
+        wave_time_bps = {'Wave time', 'icon-huntingsessionanalyser-widget'},
+        crystal_health_bps = {'Crystal health', 'icon_shielding'},
+    }
+    if #summary.selected > 0 then section('COMBINED DIFFICULTY') end
+    for _, effect in ipairs(summary.effects) do
+        if effect.factor ~= 1 then
+            local meta = effects[effect.key]
+            stat(meta[1], string.format('%+.0f%%', (effect.factor - 1) * 100), meta[2])
+        end
+    end
+    section('REWARD BONUSES')
+    stat('Gold', string.format('+%.2f%%', summary.goldBonusBps / 100), 'icon-balance', '#f4d08a')
+        :setTooltip(summary.goldCapped and 'Gold bonus reached its cap.' or 'Bonus applies to eligible gold rewards.')
+    stat('Ascension XP', string.format('+%.2f%%', summary.ascensionXpBonusBps / 100), 'icon_experience', '#86c8b2')
+        :setTooltip(summary.xpCapped and 'Ascension XP bonus reached its cap.' or 'Bonus applies to eligible Ascension XP rewards.')
+    for _, loot in ipairs(summary.loot) do
+        section('COMPLETION LOOT  /  ' .. loot.rolls .. ' ROLL(S)')
+        for _, entry in ipairs(loot.entries) do
+            local chance = entry.chanceBps > 0 and entry.chanceBps < 1 and '<0.01%' or string.format('%.2f%%', entry.chanceBps / 100)
+            local row = stat(entry.name .. (entry.noDrop and '' or (' x' .. entry.quantity)), chance, nil, '#9ac5df', 'XibatMutationLoot')
+            if not entry.noDrop then row.item:setItemId(entry.clientId) end
+            row:setTooltip(entry.name .. ': ' .. chance .. ' per independent roll. Requires a successful clear and final-wave eligibility.')
+        end
+    end
+    local note = g_ui.createWidget('XibatMutationLine', panel)
+    note:setText('Bonuses require eligible rewards. Completion drops are not guaranteed.')
 end
 
 function raidSelectorController:renderMutationChoices()

@@ -36,6 +36,12 @@ scheduleEvent(function()
                 assert(p.x >= 0 and p.y >= 0 and p.x + window:getWidth() <= rootSize.width and
                     p.y + window:getHeight() <= rootSize.height, 'Configuration window is outside viewport')
                 assert(window.summary:getChildCount() > 5 and window.summary:getWidth() > 200, 'Local summary did not render')
+                for _, row in ipairs(window.summary:getChildren()) do
+                    if row:getChildById('item') then
+                        assert(row.caption:getPosition().y == row.value:getPosition().y and
+                            row.caption:getHeight() == row.value:getHeight(), 'Loot name and probability are vertically misaligned')
+                    end
+                end
                 modules.client_entergame.EnterGame.hide()
                 window:raise(); window:focus()
                 scheduleEvent(function() g_app.doScreenshot('raid-mutations.png') end, 150)

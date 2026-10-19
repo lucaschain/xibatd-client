@@ -399,6 +399,9 @@ end
 
 function selectorEnvironment.g_ui.createWidget(style, parent)
     local widget = makeSelectorWidget()
+    if style == 'XibatMutationStat' or style == 'XibatMutationLoot' then
+        for _, id in ipairs({'caption', 'value', 'icon', 'item'}) do widget[id] = makeSelectorWidget() end
+    end
     if style == 'XibatRaidCard' then
         widget.name = makeSelectorWidget()
         widget.mode = makeSelectorWidget()

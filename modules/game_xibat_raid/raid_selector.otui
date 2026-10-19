@@ -61,7 +61,7 @@ XibatRaidReward < Item
 MainWindow
   id: xibatRaidSelector
   !text: tr('Raid Command')
-  size: 1000 915
+  size: 1000 879
   @onEscape: raidSelectorController:close()
 
   Label
@@ -112,9 +112,9 @@ MainWindow
     width: 250
     anchors.left: parent.left
     anchors.top: headerSeparator.bottom
-    anchors.bottom: closeButton.top
+    anchors.bottom: parent.bottom
     margin-top: 10
-    margin-bottom: 12
+    margin-bottom: 0
 
     ScrollablePanel
       id: raidList
@@ -270,15 +270,28 @@ MainWindow
     Button
       id: startButton
       height: 28
+      font: Verdana Bold-13px
+      color: #fff2cc
+      text-align: center
+      text-offset: 0 0
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.bottom: parent.bottom
-      !text: tr('Deploy to Raid')
+      !text: tr('Start')
 
-  Button
+  UIButton
     id: closeButton
-    size: 120 24
+    size: 16 16
     anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    !text: tr('Close')
+    anchors.top: parent.top
+    margin-top: -29
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 28 0 14 14
+    tooltip: Close
     @onClick: raidSelectorController:close()
+
+    $hover:
+      image-clip: 28 14 14 14
+
+    $pressed:
+      image-clip: 28 28 14 14

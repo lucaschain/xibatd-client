@@ -21,9 +21,76 @@ XibatMutationAction < Button
   text-offset: 0 0
   padding: 0
 
+XibatMutationSection < Label
+  height: 24
+  margin-top: 4
+  margin-bottom: 4
+  font: Verdana Bold-11px
+  color: #f4d08a
+  background-color: #202c33
+  text-offset: 8 0
+  text-align: left
+
+XibatMutationStat < Panel
+  height: 28
+  margin-bottom: 3
+  background-color: #182126
+
+  UIWidget
+    id: icon
+    size: 14 14
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 7
+    image-smooth: true
+    phantom: true
+
+  Label
+    id: caption
+    anchors.left: icon.right
+    anchors.right: value.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    margin-left: 7
+    color: #c4ccd1
+    text-align: left
+
+  Label
+    id: value
+    width: 100
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    margin-right: 8
+    text-align: right
+    font: Verdana Bold-11px
+    color: #f0bf83
+
+XibatMutationLoot < XibatMutationStat
+  height: 36
+
+  UIItem
+    id: item
+    size: 32 32
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    virtual: true
+    phantom: true
+
+  Label
+    id: caption
+    anchors.left: item.right
+    anchors.right: value.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    margin-left: 7
+    text-align: left
+    text-offset: 0 0
+    color: #c4ccd1
+
 MainWindow
   id: xibatRaidMutations
-  size: 680 480
+  size: 680 448
   !text: tr('Raid mutations')
   @onEscape: raidSelectorController:closeMutations()
 
@@ -87,22 +154,33 @@ MainWindow
 
   XibatMutationAction
     id: normalButton
-    anchors.bottom: closeButton.top
+    anchors.bottom: parent.bottom
     anchors.left: parent.left
-    margin-bottom: 8
+    margin-bottom: 0
     width: 130
     !text: tr('Clear mutations')
 
   XibatMutationAction
     id: deployButton
+    font: Verdana Bold-11px
+    color: #fff2cc
     anchors.bottom: normalButton.bottom
     anchors.right: parent.right
     width: 145
     !text: tr('Review selection')
 
-  XibatMutationAction
+  UIButton
     id: closeButton
-    anchors.bottom: parent.bottom
+    anchors.top: parent.top
     anchors.right: parent.right
-    width: 90
-    !text: tr('Close')
+    margin-top: -29
+    size: 16 16
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 28 0 14 14
+    tooltip: Close
+
+    $hover:
+      image-clip: 28 14 14 14
+
+    $pressed:
+      image-clip: 28 28 14 14

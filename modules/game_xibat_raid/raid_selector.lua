@@ -159,7 +159,7 @@ function raidSelectorController:selectRaid(raid, card)
     self.ui.detail.rewardsTitle:setVisible(#raid.items > 0)
     self.ui.detail.rewards:setVisible(#raid.items > 0)
     self.ui.detail.startButton:setEnabled(raid.available)
-    self.ui.detail.startButton:setText(raid.available and tr('Configure / Deploy') or tr('Raid Locked'))
+    self.ui.detail.startButton:setText(raid.available and tr('Start') or tr('Raid Locked'))
     self.ui.detail.startButton.onClick = function()
         self:configureRaid()
     end
