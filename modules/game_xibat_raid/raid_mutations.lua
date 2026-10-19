@@ -2,20 +2,20 @@ local C = RaidMutationContract
 local opcode = modules.game_xibat_core.XibatOpcode.RaidSelector
 
 function raidSelectorController:initMutations()
+    self.cachedRaidConfigurations, self.mutationSelections = {}, {}
     self.mutationWindow = g_ui.loadUI('raid_mutations', g_ui.getRootWidget())
     self.mutationStatus = g_ui.loadUI('raid_mutation_status', g_ui.getRootWidget())
     self.mutationWindow:hide()
     self.mutationStatus:hide()
     self.mutationWindow.closeButton.onClick = function() self:closeMutations() end
-    self.mutationWindow.refreshButton.onClick = function() self:requestMutationCatalog() end
     self.mutationWindow.normalButton.onClick = function()
-        if self.mutationCatalog and not self.mutationCatalog.lobby and not self.acceptPending then
-            self.mutationSelection = {}
-            self:renderMutationChoices()
-            self:requestMutationPreview()
-        end
+        if self.mutationView ~= 'selection' or self.deployPending or (self.mutationOffer and self.mutationOffer.lobbyChannel > 0) then return end
+        self.mutationSelection = {}
+        self.mutationSelections[self.selectedRaid.raidId] = self.mutationSelection
+        self:renderMutationChoices()
+        self:updateLocalMutationPreview()
     end
-    self.mutationWindow.deployButton.onClick = function() self:confirmMutations() end
+    self.mutationWindow.deployButton.onClick = function() self:deployConfiguredRaid() end
     self.mutationStatus.onClick = function()
         if not self.activeMutationStatus then return end
         self:closeMutations()
@@ -24,7 +24,6 @@ function raidSelectorController:initMutations()
         self.mutationWindow.choices:destroyChildren()
         self.mutationWindow.notice:setText('Locked configuration for your current raid.')
         self.mutationWindow.deployButton:setEnabled(false)
-        self.mutationWindow.refreshButton:setEnabled(false)
         self.mutationWindow.normalButton:setEnabled(false)
         self:renderMutationSummary(self.activeMutationStatus.summary)
         self.mutationWindow:show()
@@ -34,64 +33,68 @@ function raidSelectorController:initMutations()
 end
 
 function raidSelectorController:closeMutations()
-    self:destroyPrompt()
-    self.mutationPreview = nil
-    self.mutationPending = nil
-    self.acceptPending = false
-    self.mutationView = nil
+    self.localMutationPreview, self.deployPending, self.mutationView = nil, nil, nil
     if self.mutationWindow then self.mutationWindow:hide() end
-end
-
-function raidSelectorController:sendMutationRequest(action, body)
-    local protocol = g_game.getProtocolGame()
-    if not protocol or not self.mutationSession then return end
-    self.mutationRequestId = (self.mutationRequestId or 0) % 2147483647 + 1
-    body.version, body.session, body.requestId = C.version, self.mutationSession, self.mutationRequestId
-    self.mutationPending = { action = action, requestId = body.requestId, raidId = self.selectedRaid.raidId }
-    protocol:sendExtendedJSONOpcode(opcode, { action = action, body = body })
 end
 
 function raidSelectorController:openMutations()
     self:closeMutations()
     self.mutationView = 'selection'
     self.mutationWindow.heading:setText(self.selectedRaid.name .. ' - mutations')
+    self:loadLocalMutationConfiguration()
     self.mutationWindow:show()
     self.mutationWindow:raise()
     self.mutationWindow:focus()
-    self:requestMutationCatalog()
 end
 
-function raidSelectorController:requestMutationCatalog()
-    if self.mutationView ~= 'selection' or not self.selectedRaid or self.acceptPending then return end
-    self:destroyPrompt()
-    self.mutationPreview, self.mutationCatalog = nil, nil
-    self.mutationWindow.choices:destroyChildren()
-    self.mutationWindow.summary:destroyChildren()
-    self.mutationWindow.notice:setText('Loading available mutations...')
-    self.mutationWindow.deployButton:setEnabled(false)
-    self.mutationWindow.normalButton:setEnabled(false)
-    self.mutationWindow.refreshButton:setEnabled(true)
-    self:sendMutationRequest('mutationCatalog', { raidId = self.selectedRaid.raidId })
+function raidSelectorController:loadLocalMutationConfiguration()
+    local raid = self.selectedRaid
+    self.mutationOffer = self.mutationVersion and self.cachedRaidConfigurations[raid.raidId] or nil
+    self.mutationCatalog = self.cachedMutationCatalog
+    if self.mutationVersion and (not self.mutationOffer or self.mutationOffer.revision ~= raid.configurationRevision) then
+        self.mutationWindow.choices:destroyChildren()
+        self.mutationWindow.summary:destroyChildren()
+        self.mutationWindow.notice:setText('Raid configuration is unavailable. Reopen the raid menu.')
+        self.localMutationPreview = nil
+        self.mutationWindow.deployButton:setEnabled(false)
+        self.mutationWindow.normalButton:setEnabled(false)
+        return
+    end
+    if self.mutationOffer and self.mutationOffer.lobbyChannel > 0 then
+        self.mutationSelection = {}
+        for _, selected in ipairs(self.mutationOffer.summary.selected) do self.mutationSelection[selected.id] = true end
+    else
+        local previous = self.mutationSelections[raid.raidId] or {}
+        self.mutationSelection = {}
+        if self.mutationOffer and self.mutationCatalog then
+            for _, mutation in ipairs(self.mutationCatalog.mutations) do
+                if previous[mutation.id] and not C.unavailable(self.mutationCatalog, self.mutationOffer, mutation) then self.mutationSelection[mutation.id] = true end
+            end
+        end
+        self.mutationSelections[raid.raidId] = self.mutationSelection
+    end
+    self:renderMutationChoices()
+    self:updateLocalMutationPreview()
 end
 
 function raidSelectorController:renderMutationSummary(summary)
     self.mutationWindow.summary:destroyChildren()
     for _, line in ipairs(C.lines(summary)) do
-        local label = g_ui.createWidget('XibatMutationLine', self.mutationWindow.summary)
-        label:setText(line)
-        label:setHeight(#line > 80 and 64 or (#line > 40 and 40 or 24))
+        g_ui.createWidget('XibatMutationLine', self.mutationWindow.summary):setText(line)
     end
 end
 
 function raidSelectorController:renderMutationChoices()
-    local catalog = self.mutationCatalog
     self.mutationWindow.choices:destroyChildren()
-    local selected, count = self.mutationSelection, 0
+    local catalog, offer, selected = self.mutationCatalog, self.mutationOffer, self.mutationSelection
+    local locked = offer and offer.lobbyChannel > 0
+    local definitions = locked and offer.summary.selected or (offer and catalog and catalog.mutations or {})
+    local count = 0
     for _ in pairs(selected) do count = count + 1 end
-    for _, m in ipairs(catalog.mutations) do
-        local reason = not m.available and m.reason or nil
-        if not selected[m.id] then
-            for _, other in ipairs(catalog.mutations) do
+    for _, m in ipairs(definitions) do
+        local reason = not locked and C.unavailable(catalog, offer, m) or nil
+        if not locked and not selected[m.id] then
+            for _, other in ipairs(definitions) do
                 if selected[other.id] then
                     for _, conflict in ipairs(m.conflicts) do if conflict == other.id then reason = 'Conflicts with ' .. other.name end end
                     for _, conflict in ipairs(other.conflicts) do if conflict == m.id then reason = 'Conflicts with ' .. other.name end end
@@ -100,72 +103,62 @@ function raidSelectorController:renderMutationChoices()
             if count >= catalog.maximumSelections then reason = 'Selection limit reached.' end
         end
         local card = g_ui.createWidget('XibatMutationChoice', self.mutationWindow.choices)
-        card:setText((selected[m.id] and '[x] ' or '[ ] ') .. m.name)
-        card:setTooltip(m.description .. (m.requiresCrystal and '\nRequires a crystal raid.' or '') .. (reason and ('\n' .. reason) or ''))
-        card:setEnabled(not self.acceptPending and not catalog.lobby and (selected[m.id] or not reason))
+        card:setText(m.name)
+        card:setChecked(selected[m.id] == true)
+        card:setTooltip(m.name .. (m.description and ('\n' .. m.description) or '') .. (reason and ('\n' .. reason) or ''))
+        card:setEnabled(not self.deployPending and not locked and (selected[m.id] or not reason))
         card:setOpacity(selected[m.id] and 1 or (reason and 0.45 or 0.8))
-        card.onClick = function()
-            if self.acceptPending or catalog.lobby or (reason and not selected[m.id]) then return end
-            selected[m.id] = not selected[m.id] or nil
+        card.onCheckChange = function(widget, checked)
+            if self.mutationView ~= 'selection' or self.mutationOffer ~= offer or self.mutationSelection ~= selected then return end
+            if self.deployPending or locked or (reason and not selected[m.id]) then widget:setChecked(selected[m.id] == true) return end
+            selected[m.id] = checked or nil
             self:renderMutationChoices()
-            self:requestMutationPreview()
+            self:updateLocalMutationPreview()
         end
     end
-    self.mutationWindow.normalButton:setEnabled(not catalog.lobby and not self.acceptPending)
-    self.mutationWindow.deployButton:setText(catalog.lobby and tr('Join party lobby') or tr('Deploy to raid'))
+    self.mutationWindow.normalButton:setEnabled(not locked and not self.deployPending)
+    self.mutationWindow.deployButton:setText(locked and tr('Join party lobby') or tr('Deploy to raid'))
 end
 
-function raidSelectorController:requestMutationPreview()
-    local catalog = self.mutationCatalog
-    if not catalog or self.acceptPending then return end
-    self:destroyPrompt()
-    self.mutationPreview = nil
-    self.mutationWindow.summary:destroyChildren()
-    self.mutationWindow.deployButton:setEnabled(false)
-    self.mutationWindow.notice:setText(catalog.lobby and 'Reviewing the locked party configuration...' or 'Calculating challenge and rewards...')
+function raidSelectorController:updateLocalMutationPreview()
+    local preview, error = C.preview(self.mutationCatalog, self.mutationOffer, self.selectedRaid.name, self.mutationSelection)
+    self.localMutationPreview = preview
+    self.mutationWindow.deployButton:setEnabled(preview ~= nil and not self.deployPending)
+    if not preview then self.mutationWindow.notice:setText(error) return end
+    self:renderMutationSummary(preview)
+    self.mutationWindow.notice:setText(self.mutationOffer and self.mutationOffer.lobbyChannel > 0 and
+        'Party lobby: the shown configuration is locked.' or 'Choose your settings, then Deploy. Settings are checked when you deploy.')
+end
+
+function raidSelectorController:deployConfiguredRaid()
+    if self.mutationView ~= 'selection' or self.deployPending or not self.localMutationPreview or not self.selectedRaid then return end
+    local protocol = g_game.getProtocolGame()
+    if not protocol then return end
+    local raid = self.selectedRaid
+    if not self.mutationVersion then
+        protocol:sendExtendedJSONOpcode(opcode, { action = 'startRaid', body = { raidId = raid.raidId } })
+        self:close()
+        return
+    end
+    self.mutationRequestId = (self.mutationRequestId or 0) % 2147483647 + 1
+    local offer = self.mutationOffer
     local selected = {}
-    for id in pairs(self.mutationSelection) do table.insert(selected, id) end
-    table.sort(selected)
-    self:sendMutationRequest('mutationPreview', { raidId = self.selectedRaid.raidId, catalogHash = catalog.catalogHash,
-        ids = selected, lobbyChannel = catalog.lobby and catalog.lobby.channel or 0,
-        lobbyGeneration = catalog.lobby and catalog.lobby.generation or '0' })
-end
-
-function raidSelectorController:updateMutationExpiry()
-    if self.mutationPreview and self.mutationPreview.expires <= os.time() then
-        self.mutationPreview = nil
-        self:destroyPrompt()
-        self.mutationWindow.deployButton:setEnabled(false)
-        self.mutationWindow.notice:setText('Preview expired. Open the raid selector again to refresh it.')
-    end
-end
-
-function raidSelectorController:confirmMutations()
-    self:updateMutationExpiry()
-    local preview, session = self.mutationPreview, self.mutationSession
-    if not preview or self.acceptPending then return end
-    self:destroyPrompt()
-    local function confirm()
-        if self.mutationPreview ~= preview or self.mutationSession ~= session or preview.expires <= os.time() or self.acceptPending then return end
-        self:destroyPrompt()
-        self.acceptPending = true
-        self.mutationWindow.deployButton:setEnabled(false)
-        self.mutationWindow.refreshButton:setEnabled(false)
-        self:renderMutationChoices()
-        self.ui:hide()
-        self.mutationWindow.notice:setText('Waiting for raid admission...')
-        self:sendMutationRequest('mutationAccept', { token = preview.token })
-    end
-    local function cancel() self:destroyPrompt() end
-    self.startPrompt = displayGeneralBox(preview.joining and tr('Join party lobby') or tr('Deploy to raid'),
-        string.format('%s %s with %d mutation(s)?\nGold +%.2f%%; Ascension XP +%.2f%%.\nCompletion loot requires a successful clear.',
-            preview.joining and 'Join' or 'Enter', preview.summary.raidName, #preview.summary.selected,
-            preview.summary.goldBonusBps / 100, preview.summary.ascensionXpBonusBps / 100),
-        { { text = tr('Confirm'), callback = confirm }, { text = tr('Cancel'), callback = cancel } }, confirm, cancel)
+    for _, entry in ipairs(self.localMutationPreview.selected) do table.insert(selected, entry.id) end
+    self.deployPending = { requestId = self.mutationRequestId, raidId = raid.raidId }
+    self:renderMutationChoices()
+    self.mutationWindow.deployButton:setEnabled(false)
+    self.mutationWindow.notice:setText('Deploying...')
+    self.ui:hide()
+    protocol:sendExtendedJSONOpcode(opcode, { action = 'deployRaid', body = {
+        version = C.version, requestId = self.mutationRequestId, raidId = raid.raidId, ids = selected,
+        revision = offer.revision, catalogHash = offer.catalogHash, lobbyChannel = offer.lobbyChannel, lobbyGeneration = offer.lobbyGeneration,
+    } })
 end
 
 function raidSelectorController:onMutationOpcode(action, body)
     if not C.response(action, body) then return end
+    if action == 'mutationCatalog' then self.cachedMutationCatalog = body return end
+    if action == 'raidConfiguration' then self.cachedRaidConfigurations[body.raidId] = body return end
     if action == 'mutationStatus' then
         local old = self.activeMutationStatus
         if body.phase == 'clear' then
@@ -186,31 +179,14 @@ function raidSelectorController:onMutationOpcode(action, body)
         end
         return
     end
-    local pending = self.mutationPending
-    if not pending or body.session ~= self.mutationSession or body.requestId ~= pending.requestId or
-        (body.raidId and body.raidId ~= pending.raidId) then return end
-    if action ~= 'mutationError' and action ~= (pending.action == 'mutationAccept' and 'mutationAccepted' or pending.action) then return end
-    self.mutationPending = nil
-    if action == 'mutationError' then
-        self.acceptPending, self.mutationPreview = false, nil
-        self:destroyPrompt()
-        self.mutationWindow.deployButton:setEnabled(false)
-        self.mutationWindow.refreshButton:setEnabled(true)
-        self.mutationWindow.notice:setText(body.message)
-    elseif action == 'mutationAccepted' then
-        self:close()
-    elseif action == 'mutationCatalog' then
-        self.mutationCatalog, self.mutationSelection = body, {}
-        if body.lobby then for _, id in ipairs(body.lobby.ids) do self.mutationSelection[id] = true end end
-        self:renderMutationChoices()
-        self:requestMutationPreview()
-    elseif action == 'mutationPreview' then
-        self.mutationPreview = body
-        self:renderMutationSummary(body.summary)
-        self.mutationWindow.notice:setText(body.joining and 'Party lobby: the shown configuration is locked.' or
-            (#self.mutationCatalog.mutations == 0 and 'No mutations are configured. Review the normal raid below.' or
-                'Choose mutations, then confirm the shown challenge and rewards.'))
-        self.mutationWindow.deployButton:setEnabled(true)
-        self:updateMutationExpiry()
-    end
+    local pending = self.deployPending
+    if not pending or body.requestId ~= pending.requestId or body.raidId ~= pending.raidId then return end
+    self.deployPending = nil
+    if action == 'raidDeployed' then self:close() return end
+    -- The server pushes updated data before a rejection. Preserve valid local
+    -- choices and require another explicit Deploy, never an automatic retry.
+    local updated = self.cachedRaidConfigurations[body.raidId]
+    if updated then self.selectedRaid.configurationRevision = updated.revision end
+    self:loadLocalMutationConfiguration()
+    self.mutationWindow.notice:setText(body.message)
 end

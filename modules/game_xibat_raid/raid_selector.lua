@@ -86,13 +86,6 @@ local function validateSelector(body)
     return true
 end
 
-function raidSelectorController:destroyPrompt()
-    if self.startPrompt then
-        self.startPrompt:destroy()
-        self.startPrompt = nil
-    end
-end
-
 function raidSelectorController:clearResetTimer()
     if self.resetEvent then
         self:removeEvent(self.resetEvent)
@@ -102,7 +95,6 @@ function raidSelectorController:clearResetTimer()
 end
 
 function raidSelectorController:updateResetTimer()
-    self:updateMutationExpiry()
     if not self.resetDeadline or not self.ui then
         return false
     end
@@ -111,7 +103,6 @@ function raidSelectorController:updateResetTimer()
     self.ui.reset:setText(string.format('%02d:%02d:%02d', math.floor(secondsLeft / 3600),
         math.floor(secondsLeft / 60) % 60, secondsLeft % 60))
     if secondsLeft == 0 then
-        if self.mutationSession then return true end
         self.resetDeadline = nil
         self.resetEvent = nil
         return false
@@ -131,8 +122,7 @@ end
 
 function raidSelectorController:close()
     self:closeMutations()
-    self.mutationSession = nil
-    self:destroyPrompt()
+    self.mutationVersion = nil
     self:clearResetTimer()
     self.selectedRaid = nil
     if self.ui then
@@ -169,9 +159,9 @@ function raidSelectorController:selectRaid(raid, card)
     self.ui.detail.rewardsTitle:setVisible(#raid.items > 0)
     self.ui.detail.rewards:setVisible(#raid.items > 0)
     self.ui.detail.startButton:setEnabled(raid.available)
-    self.ui.detail.startButton:setText(raid.available and (self.mutationSession and tr('Configure / Deploy') or tr('Deploy to Raid')) or tr('Raid Locked'))
+    self.ui.detail.startButton:setText(raid.available and tr('Configure / Deploy') or tr('Raid Locked'))
     self.ui.detail.startButton.onClick = function()
-        self:confirmStart()
+        self:configureRaid()
     end
 
     if self.selectedCard and self.selectedCard ~= card then
@@ -213,38 +203,19 @@ function raidSelectorController:buildRaidList(raids)
     end
 end
 
-function raidSelectorController:confirmStart()
+function raidSelectorController:configureRaid()
     local raid = self.selectedRaid
     if not raid or not raid.available then
         return
     end
-    if self.mutationSession then self:openMutations() return end
-
-    self:destroyPrompt()
-    local function cancel()
-        self:destroyPrompt()
-    end
-    local function confirm()
-        local protocol = g_game.getProtocolGame()
-        if not protocol then
-            cancel()
-            return
-        end
-        protocol:sendExtendedJSONOpcode(RAID_OPCODE, { action = 'startRaid', body = { raidId = raid.raidId } })
-        self:close()
-    end
-
-    self.startPrompt = displayGeneralBox(tr('Deploy to Raid'),
-        tr('Start %s now?', raid.name), {
-            { text = tr('Deploy'), callback = confirm },
-            { text = tr('Cancel'), callback = cancel },
-        }, confirm, cancel)
+    self:openMutations()
 end
 
 function raidSelectorController:openSelector(body)
-    self:destroyPrompt()
     self:closeMutations()
-    self.mutationSession = body.mutations and body.mutations.session or nil
+    self.mutationVersion = body.mutationVersion
+    self.mutationWindow.choices:destroyChildren()
+    self.mutationWindow.summary:destroyChildren()
     self.ui.entries:setText(string.format('%d / %d', body.availableRaids, body.maxRaids))
     self:buildRaidList(body.raidList)
     self:startResetTimer(body.timerReset)
@@ -261,9 +232,12 @@ function raidSelectorController:onRaidOpcode(_, _, payload)
     if type(payload) ~= 'table' or payload.action ~= 'openRaidSelector' or not validateSelector(payload.body) then
         return
     end
-    if payload.body.mutations ~= nil and (type(payload.body.mutations) ~= 'table' or
-        payload.body.mutations.version ~= RaidMutationContract.version or
-        not RaidMutationContract.identity(payload.body.mutations.session)) then return end
+    if payload.body.mutationVersion ~= nil and payload.body.mutationVersion ~= RaidMutationContract.version then return end
+    if payload.body.mutationVersion then
+        for _, raid in ipairs(payload.body.raidList) do
+            if type(raid.configurationRevision) ~= 'string' or #raid.configurationRevision ~= 64 then return end
+        end
+    end
     self:openSelector(payload.body)
 end
 
@@ -294,6 +268,8 @@ end
 
 function raidSelectorController:onGameEnd()
     self:close()
+    self.cachedMutationCatalog = nil
+    self.cachedRaidConfigurations, self.mutationSelections = {}, {}
     self.activeMutationStatus = nil
     self.mutationStatus:hide()
 end

@@ -3,7 +3,11 @@ Button
   anchors.top: parent.top
   anchors.horizontalCenter: parent.horizontalCenter
   margin-top: 170
-  size: 320 42
+  size: 300 32
+  font: verdana-11px-rounded
+  text-align: center
+  text-offset: 0 0
+  padding: 0
   text-wrap: true
   color: #f4d08a
   visible: false

@@ -313,11 +313,18 @@ local function makeSelectorWidget()
     function widget:focus() end
     function widget:destroy() self.destroyed = true end
     function widget:destroyChildren() self.children = {} end
+    function widget:getChildren() return self.children end
     function widget:setText(text) self.text = text end
     function widget:setColor(color) self.color = color end
     function widget:setValue(value) self.value = value end
     function widget:setVisible(visible) self.visible = visible end
     function widget:setEnabled(enabled) self.enabled = enabled end
+    function widget:setChecked(checked)
+        if self.checked == checked then return end
+        self.checked = checked
+        if self.onCheckChange then self.onCheckChange(self, checked) end
+    end
+    function widget:isChecked() return self.checked == true end
     function widget:setOpacity(opacity) self.opacity = opacity end
     function widget:setBackgroundColor(color) self.backgroundColor = color end
     function widget:setTooltip(tooltip) self.tooltip = tooltip end
@@ -406,7 +413,7 @@ end
 function selectorEnvironment.g_ui.loadUI(name)
     local widget = makeSelectorWidget()
     if name == 'raid_mutations' then
-        for _, id in ipairs({ 'heading', 'notice', 'choices', 'summary', 'closeButton', 'refreshButton', 'normalButton', 'deployButton' }) do
+        for _, id in ipairs({ 'heading', 'notice', 'choices', 'summary', 'closeButton', 'normalButton', 'deployButton' }) do
             widget[id] = makeSelectorWidget()
         end
     end
@@ -417,6 +424,7 @@ function selectorEnvironment.g_ui.getRootWidget() return selectorUI end
 function selectorEnvironment.g_game.getProtocolGame()
     return {
         sendExtendedJSONOpcode = function(_, opcode, payload)
+            selectorState.sendCount = (selectorState.sendCount or 0) + 1
             selectorState.sent = { opcode = opcode, payload = payload }
         end,
     }
@@ -479,125 +487,100 @@ requireValue(selectorUI.detail.screenshot.visible and
     "raid selector did not render the matching screenshot")
 
 selectorUI.detail.startButton.onClick()
-requireValue(selectorState.prompt and #selectorState.prompt.buttons == 2,
-    "raid start confirmation did not open")
-selectorState.prompt.buttons[1].callback()
+requireValue(selectorState.prompt == nil and selectorState.sent == nil and selectorController.mutationWindow.visible,
+    'Configure should only open the local window, including on an original server')
+selectorController.mutationWindow.deployButton.onClick()
 requireValue(selectorState.sent and selectorState.sent.opcode == 207 and
     selectorState.sent.payload.action == 'startRaid' and selectorState.sent.payload.body.raidId == 1,
     "raid start request did not preserve the server contract")
 requireValue(not selectorUI.visible and selectorActiveEvents() == 0,
     "confirmed raid start retained selector UI or scheduled work")
 
--- Versioned mutation selection keeps legacy selection intact while fencing stale responses.
-validSelector.body.mutations = { version = 1, session = '7' }
-selectorState.callbacks[207](nil, 207, validSelector)
+local makeMutationFixture = assert(loadfile(root .. '/tests/raid_mutation_fixture.lua'))()
+local catalog, offer, menu = makeMutationFixture()
+local function receive(action, body) selectorState.callbacks[207](nil, 207, { action = action, body = body }) end
+local before = selectorState.sendCount
+receive('mutationCatalog', catalog)
+receive('raidConfiguration', offer)
+local otherOffer = { version = 2, raidId = 11, revision = string.rep('e', 64), catalogHash = catalog.catalogHash,
+    useCrystal = true, lobbyChannel = 0, lobbyGeneration = '0' }
+receive('raidConfiguration', otherOffer)
+menu.body.raidList[2] = { raidId = 11, name = 'Hive', description = 'Second local raid', available = true,
+    configurationRevision = otherOffer.revision, wavesTotal = 9, wavesCompleted = 0, items = {}, tier = 'bronze', mode = 'survival' }
+selectorState.callbacks[207](nil, 207, menu)
 selectorUI.detail.startButton.onClick()
 local window = selectorController.mutationWindow
-requireValue(window.visible and selectorState.sent.payload.action == 'mutationCatalog', 'new selector did not request a mutation catalog')
-local catalogRequest = selectorState.sent.payload.body.requestId
-local catalog = { version = 1, session = '7', requestId = catalogRequest, raidId = 1,
-    catalogHash = string.rep('a', 64), maximumSelections = 2, mutations = {
-        { id = 'fortified', name = 'Fortified', description = 'More enemy health', available = true, reason = '', requiresCrystal = false, conflicts = { 'haste' } },
-        { id = 'haste', name = 'Haste', description = 'Faster enemies', available = true, reason = '', requiresCrystal = false, conflicts = {} },
-    } }
-selectorState.callbacks[207](nil, 207, { action = 'mutationCatalog', body = catalog })
-requireValue(#window.choices.children == 2 and selectorState.sent.payload.action == 'mutationPreview', 'catalog did not produce the normal preview')
-local firstPreviewRequest = selectorState.sent.payload.body.requestId
-window.choices.children[1].onClick()
-requireValue(not window.choices.children[2].enabled and #selectorState.sent.payload.body.ids == 1 and
-    selectorState.sent.payload.body.ids[1] == 'fortified', 'conflicting choice was not disabled or selection was not sent')
-local previewRequest = selectorState.sent.payload.body.requestId
-local summary = { configurationHash = string.rep('b', 64), raidName = 'Tutorial', selected = { { id = 'fortified', name = 'Fortified' } },
-    effects = { { key = 'enemy_health_bps', factor = 1.25 }, { key = 'enemy_speed_bps', factor = 1 },
-        { key = 'spawn_count_bps', factor = 1 }, { key = 'wave_time_bps', factor = 1 }, { key = 'crystal_health_bps', factor = 1 } },
-    goldBonusBps = 1000, ascensionXpBonusBps = 2000, goldCapped = true, xpCapped = false,
-    loot = { { id = 'materials', rolls = 2, entries = {
-        { clientId = 3031, name = 'Gold coin', quantity = 101, chanceBps = 5000, noDrop = false },
-        { clientId = 0, name = 'No drop', quantity = 0, chanceBps = 5000, noDrop = true },
-    } } } }
-local preview = { version = 1, session = '7', requestId = firstPreviewRequest, raidId = 1,
-    token = '99', expires = 1060, joining = false, summary = summary }
-selectorState.callbacks[207](nil, 207, { action = 'mutationPreview', body = preview })
-requireValue(selectorController.mutationPreview == nil, 'old selection response replaced current selection')
-preview.requestId = previewRequest
-summary.goldBonusBps = math.huge
-selectorState.callbacks[207](nil, 207, { action = 'mutationPreview', body = preview })
-requireValue(selectorController.mutationPreview == nil, 'nonfinite preview reward was accepted')
-summary.goldBonusBps = 1000
-selectorState.callbacks[207](nil, 207, { action = 'mutationPreview', body = preview })
-requireValue(window.deployButton.enabled and #window.summary.children > 5, 'authoritative preview did not render')
+requireValue(window.visible and selectorState.sendCount == before and selectorState.prompt == nil, 'Configure sent a request or opened an extra confirmation')
+window.choices.children[1]:setChecked(true)
+requireValue(not window.choices.children[2].enabled, 'local conflicts were not enforced')
+window.choices.children[3]:setChecked(true)
+local preview = selectorController.localMutationPreview
+requireValue(preview.effects[1].factor == 1.25 and preview.effects[5].factor == 0.8 and
+    preview.goldBonusBps == 1500 and preview.ascensionXpBonusBps == 2500 and preview.goldCapped and preview.xpCapped and
+    preview.loot[1].rolls == 2 and preview.loot[1].entries[1].chanceBps == 5000, 'local composition/caps/loot preview wrong')
+local C = selectorEnvironment.RaidMutationContract
+requireValue(not C.preview(catalog, offer, 'Glacio', {fortified=true, haste=true}), 'local preview accepted a conflict')
+local excessive = makeMutationFixture()
+excessive.maximumFactors[1].bps = 15000
+excessive.mutations[3].effects[1].bps = 12500
+requireValue(not C.preview(excessive, offer, 'Glacio', {fortified=true, fragile=true}), 'local preview ignored the combined effect bound')
+selectorController:selectRaid(menu.body.raidList[2], selectorController.raidList.children[2])
+selectorUI.detail.startButton.onClick()
+requireValue(#selectorController.localMutationPreview.selected == 0 and selectorState.sendCount == before, 'switching raids sent requests or inherited another raid selection')
+selectorController:selectRaid(menu.body.raidList[1], selectorController.raidList.children[1])
+selectorUI.detail.startButton.onClick()
+requireValue(window.choices.children[1]:isChecked() and window.choices.children[3]:isChecked() and selectorState.sendCount == before,
+    'returning to a raid lost its local selection or sent a request')
+selectorState.now = selectorState.now + 3600
+window.choices.children[1]:setChecked(false)
+window.choices.children[1]:setChecked(true)
+requireValue(window.deployButton.enabled and selectorState.sendCount == before and selectorState.prompt == nil, 'browsing expired or toggles sent requests')
+local cached = selectorController.cachedMutationCatalog
+receive('mutationCatalog', { version = 2, catalogHash = 'broken' })
+requireValue(selectorController.cachedMutationCatalog == cached, 'malformed metadata replaced the catalog')
 window.deployButton.onClick()
-local staleConfirm = selectorState.prompt.buttons[1].callback
-window.normalButton.onClick()
-local lastRequest = selectorState.sent
-staleConfirm()
-requireValue(selectorState.sent == lastRequest, 'destroyed confirmation accepted a changed selection')
-window.choices.children[1].onClick()
-preview.requestId = selectorState.sent.payload.body.requestId
-selectorState.callbacks[207](nil, 207, { action = 'mutationPreview', body = preview })
+local sent = selectorState.sent.payload
 window.deployButton.onClick()
-selectorState.now = 1060
-selectorState.prompt.buttons[1].callback()
-requireValue(selectorState.sent.payload.action == 'mutationPreview', 'expired preview was accepted')
-selectorController:updateMutationExpiry()
-requireValue(not window.deployButton.enabled and selectorController.startPrompt == nil, 'expired preview retained a confirmation')
-selectorState.now = 1000
-window.refreshButton.onClick()
-catalog.requestId = selectorState.sent.payload.body.requestId
-catalog.lobby = { channel = 1, generation = '9007199254740993', ids = { 'fortified' } }
-selectorState.callbacks[207](nil, 207, { action = 'mutationCatalog', body = catalog })
-requireValue(not window.choices.children[1].enabled and not window.normalButton.enabled and
-    selectorState.sent.payload.body.lobbyGeneration == '9007199254740993', 'party lobby was editable or lost identity precision')
-preview.requestId, preview.joining = selectorState.sent.payload.body.requestId, true
-selectorState.callbacks[207](nil, 207, { action = 'mutationPreview', body = preview })
+requireValue(selectorState.sendCount == before + 1 and sent.action == 'deployRaid' and sent.body.ids[1] == 'fortified' and
+    sent.body.ids[2] == 'fragile' and sent.body.token == nil and sent.body.session == nil and sent.body.goldBonusBps == nil,
+    'Deploy was not a single IDs-only request without confirmation')
+receive('raidDeploymentError', { version = 2, raidId = 10, requestId = sent.body.requestId + 1, code = 'deployment_rejected', message = 'old reply' })
+requireValue(selectorController.deployPending ~= nil, 'unrelated response consumed deployment')
+-- Updated server metadata arrives with a genuine rejection, not from a refresh request.
+offer.revision = string.rep('c', 64)
+receive('raidConfiguration', offer)
+receive('raidDeploymentError', { version = 2, raidId = 10, requestId = sent.body.requestId, code = 'deployment_rejected', message = 'Settings changed; review and deploy again.' })
+requireValue(window.choices.children[1]:isChecked() and window.choices.children[3]:isChecked() and window.deployButton.enabled and
+    selectorState.sendCount == before + 1, 'rejection lost valid choices or automatically retried')
 window.deployButton.onClick()
-local confirm = selectorState.prompt.buttons[1].callback
-confirm()
-local acceptedRequest = selectorState.sent
-confirm()
-requireValue(selectorState.sent == acceptedRequest and acceptedRequest.payload.action == 'mutationAccept' and
-    acceptedRequest.payload.body.token == '99' and acceptedRequest.payload.body.ids == nil and
-    acceptedRequest.payload.body.goldBonusBps == nil, 'acceptance duplicated or supplied client reward amounts')
-local status = { version = 1, raidId = 1, runId = '0', generation = '9007199254740993', phase = 'lobby', summary = summary }
-selectorState.callbacks[207](nil, 207, { action = 'mutationStatus', body = status })
-selectorState.callbacks[207](nil, 207, { action = 'mutationAccepted', body = {
-    version = 1, session = '7', requestId = acceptedRequest.payload.body.requestId } })
-requireValue(not window.visible and not selectorUI.visible and selectorController.mutationStatus.visible and selectorActiveEvents() == 0,
-    'admission retained selection UI/timers or lost active status')
-local active = { version = 1, raidId = 1, runId = '9007199254740994', generation = '9007199254740994', phase = 'active', summary = summary }
-selectorState.callbacks[207](nil, 207, { action = 'mutationStatus', body = active })
+requireValue(selectorState.sendCount == before + 2 and selectorState.sent.payload.body.revision == offer.revision, 'retry did not use refreshed settings')
+local summary = selectorController.localMutationPreview
+summary.configurationHash = string.rep('d', 64)
+local status = { version = 2, raidId = 10, runId = '9007199254740994', generation = '9007199254740995', phase = 'active', summary = summary }
+receive('mutationStatus', status)
+receive('raidDeployed', { version = 2, raidId = 10, requestId = selectorState.sent.payload.body.requestId })
+requireValue(not window.visible and selectorActiveEvents() == 0 and selectorController.mutationStatus.visible, 'successful deployment retained UI work or lost status')
 selectorController:onGameStart()
 requireValue(selectorController.mutationStatus.visible, 'deferred game start erased reconnect status')
 selectorController.mutationStatus.onClick()
-requireValue(window.visible and not window.deployButton.enabled, 'active configuration was not inspectable/read-only')
-selectorState.callbacks[207](nil, 207, { action = 'mutationStatus', body = {
-    version = 1, raidId = 1, runId = '0', generation = '9007199254740993', phase = 'clear' } })
-requireValue(selectorController.mutationStatus.visible, 'stale lobby clear erased current run status')
-selectorState.callbacks[207](nil, 207, { action = 'mutationStatus', body = {
-    version = 1, raidId = 1, runId = active.runId, generation = active.generation, phase = 'clear' } })
-requireValue(not selectorController.mutationStatus.visible and not window.visible, 'terminal clear retained mutation UI')
-selectorState.callbacks[207](nil, 207, { action = 'mutationStatus', body = active })
-selectorController:onGameEnd()
-requireValue(not selectorController.mutationStatus.visible and selectorController.activeMutationStatus == nil, 'logout retained mutation state')
-validSelector.body.mutations.session = '8'
-selectorState.callbacks[207](nil, 207, validSelector)
+requireValue(window.visible and not window.deployButton.enabled, 'active status was not read-only')
+receive('mutationStatus', { version = 2, raidId = 10, runId = '0', generation = '1', phase = 'clear' })
+requireValue(selectorController.mutationStatus.visible, 'stale clear erased another run')
+receive('mutationStatus', { version = 2, raidId = 10, runId = status.runId, generation = status.generation, phase = 'clear' })
+requireValue(not window.visible and not selectorController.mutationStatus.visible, 'terminal clear retained status')
+-- A party offer carries the exact old pinned summary, independent of current catalog IDs.
+offer.lobbyChannel, offer.lobbyGeneration, offer.summary, offer.revision = 1, '9007199254740993', summary, summary.configurationHash
+menu.body.raidList[1].configurationRevision = offer.revision
+receive('raidConfiguration', offer)
+selectorState.callbacks[207](nil, 207, menu)
 selectorUI.detail.startButton.onClick()
-local errorRequest = selectorState.sent.payload.body.requestId
-selectorState.callbacks[207](nil, 207, { action = 'mutationError', body = {
-    version = 1, session = '7', requestId = errorRequest, code = 'selector_expired', message = 'Stale error' } })
-requireValue(selectorController.mutationPending ~= nil, 'old-session error consumed a current request')
-selectorState.callbacks[207](nil, 207, { action = 'mutationError', body = {
-    version = 1, session = '8', requestId = errorRequest, code = 'configuration_changed', message = 'Refresh required' } })
-requireValue(window.notice.text == 'Refresh required' and not window.deployButton.enabled and window.refreshButton.enabled,
-    'structured error did not disable acceptance and permit refresh')
-window.refreshButton.onClick()
-requireValue(selectorState.sent.payload.body.requestId ~= errorRequest, 'refresh reused an obsolete request identity')
-selectorState.callbacks[207](nil, 207, { action = 'mutationCatalog', body = {
-    version = 1, session = '8', requestId = selectorState.sent.payload.body.requestId, raidId = 1,
-    catalogHash = '', maximumSelections = 0, mutations = {} } })
-requireValue(selectorState.sent.payload.action == 'mutationPreview' and #selectorState.sent.payload.body.ids == 0,
-    'unconfigured catalog did not preserve the normal raid path')
+before = selectorState.sendCount
+requireValue(not window.choices.children[1].enabled and not window.normalButton.enabled, 'party choices were editable')
+window.deployButton.onClick()
+requireValue(selectorState.sendCount == before + 1 and selectorState.sent.payload.body.lobbyGeneration == '9007199254740993', 'party deployment lost identity precision')
+selectorController:onGameEnd()
+requireValue(selectorController.cachedMutationCatalog == nil and selectorController.activeMutationStatus == nil, 'logout retained selection data')
 selectorController:onTerminate()
-requireValue(window.destroyed and selectorController.mutationWindow == nil, 'module termination leaked mutation windows')
+requireValue(window.destroyed and selectorController.mutationWindow == nil, 'module termination leaked windows')
 
 print("Xibat protocol lifecycle tests passed")

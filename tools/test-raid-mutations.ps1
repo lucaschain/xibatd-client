@@ -14,6 +14,7 @@ $init = $init.Replace('g_app.setCompactName("otclient");', ('g_app.setCompactNam
 [IO.File]::WriteAllText((Join-Path $target 'init.lua'), $init)
 [IO.File]::WriteAllText((Join-Path $target 'local-config.lua'), "Services.updater = nil`nServices.clientAssets.enabled = false`n")
 Copy-Item (Join-Path $root 'tests\xibat_raid_mutation_smoke.lua') (Join-Path $target ($name + 'rc.lua'))
+Copy-Item (Join-Path $root 'tests\raid_mutation_fixture.lua') (Join-Path $target 'mutation-fixture.lua')
 Write-Output "Mutation smoke installation: $target"
 $process = Start-Process -FilePath (Join-Path $target 'otclient.exe') -WorkingDirectory $target -PassThru
 if (-not $process.WaitForExit(30000)) { $process.Kill(); throw "Owned mutation smoke process timed out: $target" }
