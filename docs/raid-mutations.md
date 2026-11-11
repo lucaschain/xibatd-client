@@ -52,6 +52,11 @@ WebGL compilation/linking is checked separately from full browser gameplay.
 The native parser preserves OTCv8 outfit shader names when the separate creature-shader
 extension is absent, including initial creature data and later outfit updates. Full
 Windows/browser rebuilds are needed; UI-only deployment cannot install that fix.
+The current Xibat replacement-client handshake uses Redemption's separate
+`GameCreatureShader` extension, negotiated by the server, rather than the OTCv8
+outfit extension. The server sends the shader on creature descriptions and subsequent
+outfit changes. An offline outfit smoke alone does not verify this negotiation;
+server integration tests cover the replacement-client feature and creature packets.
 
 Validation note (November 2026): the first actual elite-render smoke timed out while
 Windows logged Display event 4101 (Intel `igfxn` stopped responding and recovered).
@@ -63,6 +68,23 @@ The user reported another fullscreen game running during the original incident;
 the cause of that reset remains unproven. WebGL compilation/linking also passed.
 These short checks do not establish long-session stability or full browser gameplay.
 The build remains isolated under `build/elite-validation`; production rollout is pending.
+
+Local gameplay follow-up (November 11): the user confirmed the shader after the
+Redemption negotiation fix, then reported a client exit when killing an elite.
+The Windows dump `otclient.exe.9876.dmp` resolves the original exception to
+`ThingType::getExactHeight` from `Creature::internalDraw`, indexing texture positions
+before an asynchronous texture load completed. `getExactHeight` now returns an
+uncached zero while that texture/its positions are unavailable, retrying on later draws.
+The dump also shows a secondary failure in `Stacktrace`: it called `GlobalFree` on
+a stack-allocated symbol buffer. That invalid free is removed and the symbol header
+size/alignment corrected. The offline smoke enables async loading and creates/removes
+additional cold elite outfits; it does not reproduce an actual networked enemy death.
+The original debugger report and matching executable/PDB are retained locally under
+`build/crash-analysis`.
+The updated Windows build passed the async cold-outfit creation/removal smoke
+(`build/xiba-mutation-smoke-5c31b85f0f83408cbf6032cbb59f5ce1`) with zero new
+Display 4101 events and was installed locally in `D:\XibaTD` for gameplay retesting.
+The user subsequently confirmed that killing an elite worked without the reported crash.
 
 ```sh
 luajit tests/xibat_protocol_lifecycle_test.lua .

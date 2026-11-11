@@ -29,6 +29,8 @@ scheduleEvent(function()
         window.choices:getChildren()[4]:setChecked(true)
         assert(g_shaders.getShader('Outfit - Raid Elite'), 'Elite shader did not compile/register')
         -- Render the actual outfit shader, not just the selection metadata.
+        -- Cold async textures must not let the framebuffer shader read absent rects.
+        g_app.setLoadingAsyncTexture(true)
         local elitePreview = g_ui.createWidget('UICreature', window)
         elitePreview:setSize({width = 96, height = 96})
         elitePreview:addAnchor(AnchorLeft, 'parent', AnchorLeft)
@@ -38,6 +40,20 @@ scheduleEvent(function()
         elitePreview:setOutfit({type = 21, shaders = 'Outfit - Raid Elite'})
         elitePreview:setShader('Outfit - Raid Elite')
         assert(elitePreview:hasShader(), 'Elite outfit renderer lost its shader')
+        local transientElites = {}
+        for outfit = 22, 29 do
+            local preview = g_ui.createWidget('UICreature', window)
+            preview:setSize({width = 32, height = 32})
+            preview:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+            preview:addAnchor(AnchorBottom, 'normalButton', AnchorTop)
+            preview:setMarginLeft((outfit - 21) * 34)
+            preview:setOutfit({type = outfit})
+            preview:setShader('Outfit - Raid Elite')
+            transientElites[#transientElites + 1] = preview
+        end
+        scheduleEvent(function()
+            for _, preview in ipairs(transientElites) do preview:destroy() end
+        end, 400)
         assert(controller.localMutationPreview.goldBonusBps == 1500 and controller.localMutationPreview.xpCapped,
             'Local reward preview is incorrect')
         assert(not controller.deployPending and window.deployButton:isEnabled(), 'Toggling sent a deployment or left Deploy disabled')

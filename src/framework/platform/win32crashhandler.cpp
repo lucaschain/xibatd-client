@@ -78,7 +78,7 @@ void Stacktrace(LPEXCEPTION_POINTERS e, std::stringstream& ss)
     DWORD machineType;
     int count = 0;
     char modname[MAX_PATH];
-    char symBuffer[sizeof(IMAGEHLP_SYMBOL) + 255];
+    alignas(IMAGEHLP_SYMBOL) char symBuffer[sizeof(IMAGEHLP_SYMBOL) + 255]{};
 
     auto* pSym = (PIMAGEHLP_SYMBOL)symBuffer;
 
@@ -120,7 +120,7 @@ void Stacktrace(LPEXCEPTION_POINTERS e, std::stringstream& ss)
         }
 
         Disp = 0;
-        pSym->SizeOfStruct = sizeof(symBuffer);
+        pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL);
         pSym->MaxNameLength = 254;
 
         if (SymGetSymFromAddr(process, sf.AddrPC.Offset, &Disp, pSym))
@@ -129,7 +129,6 @@ void Stacktrace(LPEXCEPTION_POINTERS e, std::stringstream& ss)
             ss << fmt::format("    {}: {} [0x%016lX]\n", count, modname, sf.AddrPC.Offset);
         ++count;
     }
-    GlobalFree(pSym);
 }
 
 LONG CALLBACK ExceptionHandler(const LPEXCEPTION_POINTERS e)

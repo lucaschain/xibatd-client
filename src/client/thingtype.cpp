@@ -1072,8 +1072,14 @@ int ThingType::getExactHeight()
     if (m_exactHeight != 0)
         return m_exactHeight;
 
-    getTexture(0);
+    // Async loading may return before the frame rectangles have been populated.
+    // Do not cache a fallback: the next draw must retry once the texture is ready.
+    if (m_textureData.empty() || !getTexture(0))
+        return 0;
     const int frameIndex = getTextureIndex(0, 0, 0, 0);
+
+    if (frameIndex >= m_textureData[0].pos.size())
+        return 0;
 
     const auto& textureDataPos = m_textureData[0].pos[frameIndex];
     const Size& size = textureDataPos.originRects.size() - textureDataPos.offsets.toSize();
