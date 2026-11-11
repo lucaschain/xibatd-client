@@ -98,6 +98,12 @@ function raidSelectorController:renderMutationSummary(summary)
     end
     for _, selected in ipairs(summary.selected) do
         stat(selected.name, 'Active', 'icon-impactanalyser-widget', '#86c8b2')
+        if selected.elite then
+            stat('Elite enemies', string.format('~%.1f%%', selected.elite.shareBps / 100), 'icon_players', '#f4d08a')
+                :setTooltip('Evenly distributed through wave spawns, rounded to whole enemies. Summons are not promoted.')
+            stat('Elite health', string.format('x%.2f', selected.elite.healthBps / 10000), 'icon_health', '#f4d08a')
+                :setTooltip('Multiplies health after other modifiers. Elite damage remains normal.')
+        end
     end
     local effects = {
         enemy_health_bps = {'Enemy health', 'icon_health'},

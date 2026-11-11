@@ -2424,6 +2424,9 @@ void ProtocolGame::parseCreatureOutfit(const InputMessagePtr& msg) const
     }
 
     creature->setOutfit(outfit);
+    // OTCv8 carries the shader inside the outfit rather than a creature extension.
+    if (g_game.getFeature(Otc::GameWingsAurasEffectsShader) && !g_game.getFeature(Otc::GameCreatureShader))
+        creature->setShader(outfit.getShader());
 }
 
 void ProtocolGame::parseCreatureSpeed(const InputMessagePtr& msg)
@@ -4246,6 +4249,8 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type) cons
         std::string shader;
         if (g_game.getFeature(Otc::GameCreatureShader)) {
             shader = msg->getString();
+        } else if (g_game.getFeature(Otc::GameWingsAurasEffectsShader)) {
+            shader = outfit.getShader();
         }
 
         std::vector<uint16_t> attachedEffectList;

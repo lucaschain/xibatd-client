@@ -522,6 +522,15 @@ requireValue(preview.effects[1].factor == 1.25 and preview.effects[5].factor == 
     preview.goldBonusBps == 1500 and preview.ascensionXpBonusBps == 2500 and preview.goldCapped and preview.xpCapped and
     preview.loot[1].rolls == 2 and preview.loot[1].entries[1].chanceBps == 5000, 'local composition/caps/loot preview wrong')
 local C = selectorEnvironment.RaidMutationContract
+local elitePreview = assert(C.preview(catalog, offer, 'Glacio', {elites=true, fortified=true}))
+requireValue(elitePreview.selected[1].elite.shareBps == 1500 and elitePreview.selected[1].elite.healthBps == 30000 and
+    elitePreview.effects[1].factor == 1.25, 'elite preview lost operands or applied triple health to every enemy')
+local invalidElite = makeMutationFixture()
+invalidElite.mutations[4].elite.shareBps = 10001
+requireValue(not C.catalog(invalidElite), 'invalid elite share accepted')
+invalidElite.mutations[4].elite.shareBps = 1500
+invalidElite.mutations[4].elite.healthBps = math.huge
+requireValue(not C.catalog(invalidElite), 'unbounded elite health accepted')
 requireValue(not C.preview(catalog, offer, 'Glacio', {fortified=true, haste=true}), 'local preview accepted a conflict')
 local excessive = makeMutationFixture()
 excessive.maximumFactors[1].bps = 15000

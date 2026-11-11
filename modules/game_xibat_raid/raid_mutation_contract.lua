@@ -30,6 +30,9 @@ local function unique(v, maximum, validate)
     end)
 end
 local function raidIds(v) return unique(v, 64, function(n) return number(n, 1, 2147483647, true) end) end
+local function elite(v)
+    return v == nil or type(v) == 'table' and number(v.shareBps, 1, 10000, true) and number(v.healthBps, 10001, 1000000, true)
+end
 local function effectList(v, field, low, high)
     local seen = {}
     return array(v, 5, function(e)
@@ -51,7 +54,7 @@ function C.summary(v)
         type(v.goldCapped) ~= 'boolean' or type(v.xpCapped) ~= 'boolean' or not effectList(v.effects, 'factor', 0.009999, 100.001) then return false end
     local seen = {}
     if not array(v.selected, C.maxSelection, function(e)
-        if type(e) ~= 'table' or not id(e.id) or not text(e.name, 128) or seen[e.id] then return false end
+        if type(e) ~= 'table' or not id(e.id) or not text(e.name, 128) or not elite(e.elite) or seen[e.id] then return false end
         seen[e.id] = true
         return true
     end) then return false end
@@ -79,7 +82,7 @@ function C.catalog(v)
             type(m.requiresCrystal) ~= 'boolean' or not raidIds(m.excludedRaids) or not unique(m.conflicts, C.maxMutations, id) or
             not effectList(m.effects, 'bps', 1, 1000000) or not number(m.goldBonusBps, 0, 1000000, true) or
             not number(m.ascensionXpBonusBps, 0, 1000000, true) or not text(m.lootTable, 64, true) or
-            not number(m.lootRolls, 0, 1024, true) then return false end
+            not number(m.lootRolls, 0, 1024, true) or not elite(m.elite) then return false end
         if (m.lootRolls == 0 and m.lootTable ~= '') or (m.lootRolls > 0 and not tables[m.lootTable]) then return false end
         definitions[m.id] = true
         return true
@@ -133,12 +136,15 @@ function C.preview(catalog, offer, name, selection)
     end
     table.sort(selected)
     if #selected > catalog.maximumSelections then return nil, 'Selection limit reached. Uncheck a mutation.' end
+    local selectedElite = false
     for _, mid in ipairs(selected) do
         local m = definitions[mid]
         local unavailable = C.unavailable(catalog, offer, m)
         if unavailable then return nil, m.name .. ': ' .. unavailable end
         for _, conflict in ipairs(m.conflicts) do if selection[conflict] then return nil, m.name .. ' conflicts with ' .. definitions[conflict].name end end
-        table.insert(result.selected, { id = mid, name = m.name })
+        if m.elite and selectedElite then return nil, 'Only one elite modifier can be selected.' end
+        if m.elite then selectedElite = true end
+        table.insert(result.selected, { id = mid, name = m.name, elite = m.elite })
         for _, e in ipairs(m.effects) do factors[e.key] = factors[e.key] * e.bps / 10000 end
         result.goldBonusBps = result.goldBonusBps + m.goldBonusBps
         result.ascensionXpBonusBps = result.ascensionXpBonusBps + m.ascensionXpBonusBps

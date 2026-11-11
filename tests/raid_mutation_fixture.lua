@@ -17,10 +17,12 @@ return function()
             mutation('fortified', 'Fortified', { enemy_health_bps = 12500 }, {'haste'}),
             mutation('haste', 'Haste', { enemy_speed_bps = 11000 }),
             mutation('fragile', 'Fragile Crystal', { crystal_health_bps = 8000 }, {}, true),
+            mutation('elites', 'Elite', {}),
         }, lootTables = { { id = 'supplies', entries = {
             { clientId = 3031, name = 'Gold coin', quantity = 101, chanceBps = 5000, noDrop = false },
             { clientId = 0, name = 'No drop', quantity = 0, chanceBps = 5000, noDrop = true },
         } } } }
+    catalog.mutations[4].elite = { shareBps = 1500, healthBps = 30000 }
     local offer = { version = 2, raidId = 10, revision = string.rep('b', 64), catalogHash = catalog.catalogHash,
         useCrystal = true, lobbyChannel = 0, lobbyGeneration = '0' }
     local raid = { raidId = 10, name = 'Glacio', description = 'Synthetic mutation UI fixture.', available = true,

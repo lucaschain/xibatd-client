@@ -150,6 +150,9 @@ function ShaderController:onInit()
     for _, opts in pairs(OUTFIT_SHADERS) do
         registerShader(opts, 'setupOutfitShader')
     end
+    -- Server-owned raid identity, not a selectable player cosmetic.
+    registerShader({ name = 'Outfit - Raid Elite', useFramebuffer = true,
+        frag = 'shaders/fragment/raid_elite.frag' }, 'setupOutfitShader')
 
     for _, opts in pairs(MOUNT_SHADERS) do
         registerShader(opts, 'setupMountShader')

@@ -41,6 +41,29 @@ through the configuration window's Deploy button.
 
 ## Verification
 
+The optional v2 `elite` operands (`shareBps`, `healthBps`) appear on catalog definitions
+and selected entries in pinned summaries. Preview rows distinguish elite-only health
+from effects on all enemies. Selection still sends only IDs, not elite operands.
+The server uses the existing outfit shader string for `Outfit - Raid Elite`, registered
+by `game_shaders`, and prefixes the displayed creature name with `Elite`. This shader
+is not offered as a player cosmetic. The native smoke renders a synthetic elite outfit;
+WebGL compilation/linking is checked separately from full browser gameplay.
+
+The native parser preserves OTCv8 outfit shader names when the separate creature-shader
+extension is absent, including initial creature data and later outfit updates. Full
+Windows/browser rebuilds are needed; UI-only deployment cannot install that fix.
+
+Validation note (November 2026): the first actual elite-render smoke timed out while
+Windows logged Display event 4101 (Intel `igfxn` stopped responding and recovered).
+A later isolated run passed and produced the expected golden outline. The November 11
+retest also passed, with zero new System Display recovery events (4101) during the
+test and a visually confirmed golden outline. Its artifacts are under
+`build/xiba-mutation-smoke-2bd1ee51a11442518d25742a07b86aeb`.
+The user reported another fullscreen game running during the original incident;
+the cause of that reset remains unproven. WebGL compilation/linking also passed.
+These short checks do not establish long-session stability or full browser gameplay.
+The build remains isolated under `build/elite-validation`; production rollout is pending.
+
 ```sh
 luajit tests/xibat_protocol_lifecycle_test.lua .
 ```
